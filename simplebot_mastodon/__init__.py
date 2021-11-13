@@ -13,6 +13,7 @@ from bs4 import BeautifulSoup
 from deltachat import Chat, Contact, Message
 from html2text import html2text
 from pydub import AudioSegment
+from pkg_resources import DistributionNotFound, get_distribution
 from simplebot.bot import DeltaBot, Replies
 
 from .db import DBManager
@@ -25,7 +26,11 @@ class Visibility(str, Enum):
     PUBLIC = "public"  # post will be public
 
 
-__version__ = "1.0.0"
+try:
+    __version__ = get_distribution(__name__).version
+except DistributionNotFound:
+    # package is not installed
+    __version__ = "0.0.0.dev0-unknown"
 MASTODON_LOGO = os.path.join(os.path.dirname(__file__), "mastodon-logo.png")
 v2emoji = {
     Visibility.DIRECT: "✉",
