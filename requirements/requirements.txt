@@ -1,0 +1,6 @@
+simplebot==2.3.0
+Mastodon.py==1.5.1
+html2text==2020.1.16
+beautifulsoup4==4.9.3
+requests==2.26.0
+pydub==0.25.1
