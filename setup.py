@@ -18,12 +18,13 @@ def load_requirements(path: str) -> list:
                 requirements.append(line.replace("==", ">="))
         return requirements
 
+
 if __name__ == "__main__":
     MODULE_NAME = "simplebot_mastodon"
     DESC = "Mastodon/DeltaChat bridge."
     KEYWORDS = "simplebot plugin deltachat mastodon bridge"
 
-    with open("README.rst") as fh:
+    with open("README.rst", encoding="utf-8") as fh:
         long_description = fh.read()
 
     setup(
