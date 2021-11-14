@@ -23,7 +23,7 @@ A Mastodon/DeltaChat bridge plugin for `SimpleBot`_.
 
 If this plugin has collisions with commands from other plugins in your bot, you can set a command prefix like ``/masto_`` for all commands::
 
-  simplebot -a bot@example.com db -s simplebot_mastodon/command_prefix masto_
+  simplebot -a bot@example.com db -s simplebot_mastodon/cmd_prefix masto_
 
 Install
 -------

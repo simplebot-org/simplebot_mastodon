@@ -44,6 +44,30 @@ def deltabot_init(bot: DeltaBot) -> None:
     getdefault(bot, "delay", "30")
     getdefault(bot, "max_users", "-1")
     getdefault(bot, "max_users_instance", "-1")
+    prefix = getdefault(bot, "cmd_prefix", "")
+
+    desc = f"Login on Mastodon.\n\nExample:\n/{prefix}login mastodon.social me@example.com myPassw0rd"
+    bot.commands.register(func=login_cmd, name=f"/{prefix}login", help=desc)
+    bot.commands.register(func=logout_cmd, name=f"/{prefix}logout")
+    bot.commands.register(func=accounts_cmd, name=f"/{prefix}accounts")
+    bot.commands.register(func=bio_cmd, name=f"/{prefix}bio")
+    bot.commands.register(func=avatar_cmd, name=f"/{prefix}avatar")
+    bot.commands.register(func=dm_cmd, name=f"/{prefix}dm")
+    bot.commands.register(func=reply_cmd, name=f"/{prefix}reply")
+    bot.commands.register(func=star_cmd, name=f"/{prefix}star")
+    bot.commands.register(func=boost_cmd, name=f"/{prefix}boost")
+    bot.commands.register(func=cntx_cmd, name=f"/{prefix}cntx")
+    bot.commands.register(func=follow_cmd, name=f"/{prefix}follow")
+    bot.commands.register(func=unfollow_cmd, name=f"/{prefix}unfollow")
+    bot.commands.register(func=mute_cmd, name=f"/{prefix}mute")
+    bot.commands.register(func=unmute_cmd, name=f"/{prefix}unmute")
+    bot.commands.register(func=block_cmd, name=f"/{prefix}block")
+    bot.commands.register(func=unblock_cmd, name=f"/{prefix}unblock")
+    bot.commands.register(func=profile_cmd, name=f"/{prefix}profile")
+    bot.commands.register(func=local_cmd, name=f"/{prefix}local")
+    bot.commands.register(func=public_cmd, name=f"/{prefix}public")
+    bot.commands.register(func=tag_cmd, name=f"/{prefix}tag")
+    bot.commands.register(func=search_cmd, name=f"/{prefix}search")
 
 
 @simplebot.hookimpl
@@ -82,9 +106,7 @@ def filter_messages(message: Message) -> None:
         )
 
 
-@simplebot.command
-def m_login(bot: DeltaBot, payload: str, message: Message, replies: Replies) -> None:
-    """Login on Mastodon. Example: /m_login mastodon.social me@example.com myPassw0rd"""
+def login_cmd(bot: DeltaBot, payload: str, message: Message, replies: Replies) -> None:
     api_url, email, passwd = payload.split(maxsplit=2)
     api_url = normalize_url(api_url)
 
@@ -127,8 +149,7 @@ def m_login(bot: DeltaBot, payload: str, message: Message, replies: Replies) -> 
     replies.add(text=text, chat=ngroup)
 
 
-@simplebot.command
-def m_logout(bot: DeltaBot, payload: str, message: Message, replies: Replies) -> None:
+def logout_cmd(bot: DeltaBot, payload: str, message: Message, replies: Replies) -> None:
     """Logout from Mastodon."""
     if payload:
         acc = db.get_account_by_id(int(payload))
@@ -148,22 +169,21 @@ def m_logout(bot: DeltaBot, payload: str, message: Message, replies: Replies) ->
         replies.add(text="Unknow account")
 
 
-@simplebot.command
-def m_accounts(message: Message, replies: Replies) -> None:
-    """Show your Mastodon accounts."""
+def accounts_cmd(bot: DeltaBot, message: Message, replies: Replies) -> None:
+    """List your Mastodon accounts."""
     accs = db.get_accounts(addr=message.get_sender_contact().addr)
     if not accs:
         replies.add(text="Empty list")
         return
+    prefix = getdefault(bot, "cmd_prefix", "")
     text = ""
     for acc in accs:
         url = rmprefix(acc["api_url"], "https://")
-        text += f"{acc['accname']}@{url}: /m_logout_{acc['id']}\n\n"
+        text += f"{acc['accname']}@{url}: /{prefix}logout_{acc['id']}\n\n"
     replies.add(text=text)
 
 
-@simplebot.command
-def m_bio(payload: str, message: Message, replies: Replies) -> None:
+def bio_cmd(payload: str, message: Message, replies: Replies) -> None:
     """Update your Mastodon biography."""
     acc = db.get_account(message.chat.id)
     if not acc:
@@ -185,8 +205,7 @@ def m_bio(payload: str, message: Message, replies: Replies) -> None:
         replies.add(text=err.args[-1])
 
 
-@simplebot.command
-def m_avatar(message: Message, replies: Replies) -> None:
+def avatar_cmd(message: Message, replies: Replies) -> None:
     """Update your Mastodon avatar."""
     acc = db.get_account(message.chat.id)
     if not acc:
@@ -208,8 +227,7 @@ def m_avatar(message: Message, replies: Replies) -> None:
         replies.add(text="Failed to update avatar")
 
 
-@simplebot.command
-def m_dm(bot: DeltaBot, payload: str, message: Message, replies: Replies) -> None:
+def dm_cmd(bot: DeltaBot, payload: str, message: Message, replies: Replies) -> None:
     """Start a private chat with the given Mastodon user."""
     args = payload.split()
     if len(args) == 2:
@@ -260,8 +278,7 @@ def m_dm(bot: DeltaBot, payload: str, message: Message, replies: Replies) -> Non
         replies.add(text="Private chat with: " + user.acct, chat=g)
 
 
-@simplebot.command
-def m_reply(payload: str, message: Message, replies: Replies) -> None:
+def reply_cmd(payload: str, message: Message, replies: Replies) -> None:
     """Reply to a toot with the given id."""
     acc_id, toot_id, text = payload.split(maxsplit=2)
     if not text and not message.filename:
@@ -280,8 +297,7 @@ def m_reply(payload: str, message: Message, replies: Replies) -> None:
     )
 
 
-@simplebot.command
-def m_star(args: list, message: Message, replies: Replies) -> None:
+def star_cmd(args: list, message: Message, replies: Replies) -> None:
     """Mark as favourite the toot with the given id."""
     acc_id, toot_id = args
     addr = message.get_sender_contact().addr
@@ -295,8 +311,7 @@ def m_star(args: list, message: Message, replies: Replies) -> None:
     m.status_favourite(toot_id)
 
 
-@simplebot.command
-def m_boost(args: list, message: Message, replies: Replies) -> None:
+def boost_cmd(args: list, message: Message, replies: Replies) -> None:
     """Boost the toot with the given id."""
     acc_id, toot_id = args
     addr = message.get_sender_contact().addr
@@ -310,8 +325,7 @@ def m_boost(args: list, message: Message, replies: Replies) -> None:
     m.status_reblog(toot_id)
 
 
-@simplebot.command
-def m_cntx(args: list, message: Message, replies: Replies) -> None:
+def cntx_cmd(args: list, message: Message, replies: Replies) -> None:
     """Get the context of the toot with the given id."""
     acc_id, toot_id = args
     addr = message.get_sender_contact().addr
@@ -329,8 +343,7 @@ def m_cntx(args: list, message: Message, replies: Replies) -> None:
         replies.add(text="Nothing found")
 
 
-@simplebot.command
-def m_follow(payload: str, message: Message, replies: Replies) -> None:
+def follow_cmd(payload: str, message: Message, replies: Replies) -> None:
     """Follow the user with the given id."""
     args = payload.split()
     if len(args) == 2:
@@ -364,8 +377,7 @@ def m_follow(payload: str, message: Message, replies: Replies) -> None:
     replies.add(text="User followed")
 
 
-@simplebot.command
-def m_unfollow(payload: str, message: Message, replies: Replies) -> None:
+def unfollow_cmd(payload: str, message: Message, replies: Replies) -> None:
     """Unfollow the user with the given id."""
     args = payload.split()
     if len(args) == 2:
@@ -399,8 +411,7 @@ def m_unfollow(payload: str, message: Message, replies: Replies) -> None:
     replies.add(text="User unfollowed")
 
 
-@simplebot.command
-def m_mute(payload: str, message: Message, replies: Replies) -> None:
+def mute_cmd(payload: str, message: Message, replies: Replies) -> None:
     """Mute the user with the given id."""
     args = payload.split()
     if len(args) == 2:
@@ -434,8 +445,7 @@ def m_mute(payload: str, message: Message, replies: Replies) -> None:
     replies.add(text="User muted")
 
 
-@simplebot.command
-def m_unmute(payload: str, message: Message, replies: Replies) -> None:
+def unmute_cmd(payload: str, message: Message, replies: Replies) -> None:
     """Unmute the user with the given id."""
     args = payload.split()
     if len(args) == 2:
@@ -469,8 +479,7 @@ def m_unmute(payload: str, message: Message, replies: Replies) -> None:
     replies.add(text="User unmuted")
 
 
-@simplebot.command
-def m_block(payload: str, message: Message, replies: Replies) -> None:
+def block_cmd(payload: str, message: Message, replies: Replies) -> None:
     """Block the user with the given id."""
     args = payload.split()
     if len(args) == 2:
@@ -504,8 +513,7 @@ def m_block(payload: str, message: Message, replies: Replies) -> None:
     replies.add(text="User blocked")
 
 
-@simplebot.command
-def m_unblock(payload: str, message: Message, replies: Replies) -> None:
+def unblock_cmd(payload: str, message: Message, replies: Replies) -> None:
     """Unblock the user with the given id."""
     args = payload.split()
     if len(args) == 2:
@@ -539,8 +547,9 @@ def m_unblock(payload: str, message: Message, replies: Replies) -> None:
     replies.add(text="User unblocked")
 
 
-@simplebot.command
-def m_profile(payload: str, message: Message, replies: Replies) -> None:
+def profile_cmd(
+    bot: DeltaBot, payload: str, message: Message, replies: Replies
+) -> None:
     """See the profile of the given user."""
     args = payload.split()
     if len(args) == 2:
@@ -588,20 +597,20 @@ def m_profile(payload: str, message: Message, replies: Replies) -> None:
             action = "unfollow"
         else:
             action = "follow"
-        text += f"\n/m_{action}_{acc['id']}_{user.id}"
+        prefix = getdefault(bot, "cmd_prefix", "")
+        text += f"\n/{prefix}{action}_{acc['id']}_{user.id}"
         action = "unmute" if rel["muting"] else "mute"
-        text += f"\n/m_{action}_{acc['id']}_{user.id}"
+        text += f"\n/{prefix}{action}_{acc['id']}_{user.id}"
         action = "unblock" if rel["blocking"] else "block"
-        text += f"\n/m_{action}_{acc['id']}_{user.id}"
-        text += f"\n/m_dm_{acc['id']}_{user.id}"
+        text += f"\n/{prefix}{action}_{acc['id']}_{user.id}"
+        text += f"\n/{prefix}dm_{acc['id']}_{user.id}"
     text += TOOT_SEP
     toots = m.account_statuses(user, limit=10)
     text += TOOT_SEP.join(toots2text(toots, acc["id"]))
     replies.add(text=text)
 
 
-@simplebot.command
-def m_local(payload: str, message: Message, replies: Replies) -> None:
+def local_cmd(payload: str, message: Message, replies: Replies) -> None:
     """Get latest entries from the local timeline."""
     if payload:
         acc = db.get_account_by_id(int(payload))
@@ -626,8 +635,7 @@ def m_local(payload: str, message: Message, replies: Replies) -> None:
         replies.add(text="Nothing found")
 
 
-@simplebot.command
-def m_public(payload: str, message: Message, replies: Replies) -> None:
+def public_cmd(payload: str, message: Message, replies: Replies) -> None:
     """Get latest entries from the public timeline."""
     if payload:
         acc = db.get_account_by_id(int(payload))
@@ -652,8 +660,7 @@ def m_public(payload: str, message: Message, replies: Replies) -> None:
         replies.add(text="Nothing found")
 
 
-@simplebot.command
-def m_tag(payload: str, message: Message, replies: Replies) -> None:
+def tag_cmd(payload: str, message: Message, replies: Replies) -> None:
     """Get latest entries with the given hashtags."""
     args = payload.split()
     if len(args) == 2:
@@ -684,8 +691,7 @@ def m_tag(payload: str, message: Message, replies: Replies) -> None:
         replies.add(text="Nothing found")
 
 
-@simplebot.command
-def m_search(payload: str, message: Message, replies: Replies) -> None:
+def search_cmd(bot: DeltaBot, payload: str, message: Message, replies: Replies) -> None:
     """Search for users and hashtags matching the given text."""
     args = payload.split()
     if len(args) == 2:
@@ -709,16 +715,17 @@ def m_search(payload: str, message: Message, replies: Replies) -> None:
 
     m = get_session(db, acc)
     res = m.search(payload)
+    prefix = getdefault(bot, "cmd_prefix", "")
     text = ""
     if res["accounts"]:
         text += "👤 Accounts:"
         for a in res["accounts"]:
-            text += f"\n@{a.acct} /m_profile_{acc['id']}_{a.id}"
+            text += f"\n@{a.acct} /{prefix}profile_{acc['id']}_{a.id}"
         text += "\n\n"
     if res["hashtags"]:
         text += "#️⃣ Hashtags:"
         for tag in res["hashtags"]:
-            text += f"\n#{tag.name} /m_tag_{acc['id']}_{tag.name}"
+            text += f"\n#{tag.name} /{prefix}tag_{acc['id']}_{tag.name}"
     if text:
         replies.add(text=text)
     else:
