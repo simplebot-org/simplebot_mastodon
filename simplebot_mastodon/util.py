@@ -1,17 +1,19 @@
-import os
-import sqlite3
+"""Utilities"""
+
 import time
 from enum import Enum
 from tempfile import NamedTemporaryFile
-from typing import Any, Generator
+from typing import Any, Generator, Optional
 
-import mastodon
 import requests
 from bs4 import BeautifulSoup
+from deltachat import Message
+from html2text import html2text
+from mastodon import Mastodon
 from pydub import AudioSegment
-from simplebot.bot import DeltaBot, Replies
+from simplebot.bot import DeltaBot
 
-from .db import DBManager
+from .orm import Account, Client, DmChat, session_scope
 
 TOOT_SEP = "\n\n―――――――――――――――\n\n"
 STRFORMAT = "%Y-%m-%d %H:%M"
@@ -32,29 +34,32 @@ v2emoji = {
 }
 
 
-def toots2text(toots: list, acc_id: int, notifications: bool = False) -> Generator:
+def toots2text(bot: DeltaBot, toots: list, notifications: bool = False) -> Generator:
+    prefix = getdefault(bot, "cmd_prefix", "")
     for t in reversed(toots):
         if notifications:
             is_mention = False
             timestamp = t.created_at.strftime(STRFORMAT)
             if t.type == "reblog":
-                text = f"🔁 {get_name(t.account)} boosted your toot. ({timestamp})\n\n"
+                text = f"🔁 {_get_name(t.account)} boosted your toot. ({timestamp})\n\n"
             elif t.type == "favourite":
-                text = f"⭐ {get_name(t.account)} favorited your toot. ({timestamp})\n\n"
+                text = (
+                    f"⭐ {_get_name(t.account)} favorited your toot. ({timestamp})\n\n"
+                )
             elif t.type == "follow":
-                yield f"👤 {get_name(t.account)} followed you. ({timestamp})"
+                yield f"👤 {_get_name(t.account)} followed you. ({timestamp})"
                 continue
             elif t.type == "mention":
                 is_mention = True
-                text = f"{get_name(t.account)}:\n\n"
+                text = f"{_get_name(t.account)}:\n\n"
             else:
                 continue
             t = t.status
         elif t.reblog:
-            text = f"{get_name(t.reblog.account)}:\n🔁 {get_name(t.account)}\n\n"
+            text = f"{_get_name(t.reblog.account)}:\n🔁 {_get_name(t.account)}\n\n"
             t = t.reblog
         else:
-            text = f"{get_name(t.account)}:\n\n"
+            text = f"{_get_name(t.account)}:\n\n"
 
         media_urls = "\n".join(media.url for media in t.media_attachments)
         if media_urls:
@@ -75,20 +80,13 @@ def toots2text(toots: list, acc_id: int, notifications: bool = False) -> Generat
 
         text += f"\n\n[{v2emoji[t.visibility]} {t.created_at.strftime(STRFORMAT)}]\n"
         if not notifications or is_mention:
-            text += f"↩️ /m_reply_{acc_id}_{t.id}\n"
-            text += f"⭐ /m_star_{acc_id}_{t.id}\n"
+            text += f"↩️ /{prefix}reply_{t.id}\n"
+            text += f"⭐ /{prefix}star_{t.id}\n"
             if t.visibility in (Visibility.PUBLIC, Visibility.UNLISTED):
-                text += f"🔁 /m_boost_{acc_id}_{t.id}\n"
-            text += f"⏫ /m_cntx_{acc_id}_{t.id}\n"
+                text += f"🔁 /{prefix}boost_{t.id}\n"
+            text += f"⏫ /{prefix}open_{t.id}\n"
 
         yield text
-
-
-def get_name(macc) -> str:
-    isbot = "[BOT] " if macc.bot else ""
-    if macc.display_name:
-        return isbot + f"{macc.display_name} (@{macc.acct})"
-    return isbot + macc.acct
 
 
 def get_user(m, user_id) -> Any:
@@ -121,173 +119,86 @@ def getdefault(bot: DeltaBot, key: str, value: str = None) -> str:
     return val
 
 
-def get_db(bot: DeltaBot) -> DBManager:
-    path = os.path.join(os.path.dirname(bot.account.db_path), __name__)
-    if not os.path.exists(path):
-        os.makedirs(path)
-    return DBManager(os.path.join(path, "sqlite.db"))
+def get_profile(bot: DeltaBot, masto: Mastodon, username: str = None) -> str:
+    me = masto.me()
+    if not username:
+        user = me
+    else:
+        user = get_user(masto, username)
+        if user is None:
+            return "❌ Invalid user"
 
-
-def rmprefix(text, prefix) -> str:
-    return text[text.startswith(prefix) and len(prefix) :]
-
-
-def logout(db: DBManager, bot: DeltaBot, acc, replies: Replies) -> None:
-    me = bot.self_contact
-    for pchat in db.get_pchats(acc["id"]):
-        g = bot.get_chat(pchat["id"])
-        try:
-            g.remove_contact(me)
-        except ValueError:
-            pass
-    try:
-        bot.get_chat(acc["home"]).remove_contact(me)
-    except ValueError:
-        pass
-    try:
-        bot.get_chat(acc["notif"]).remove_contact(me)
-    except ValueError:
-        pass
-    db.remove_account(acc["id"])
-    replies.add(
-        text="You have logged out from: " + acc["api_url"],
-        chat=bot.get_chat(acc["addr"]),
-    )
-
-
-def _check_notifications(
-    db: DBManager, bot: DeltaBot, acc: sqlite3.Row, m: mastodon.Mastodon
-) -> None:
-    max_id = None
-    dmsgs = []
-    notifications = []
-    while True:
-        ns = m.notifications(max_id=max_id, since_id=acc["last_notif"])
-        if not ns:
-            break
-        if max_id is None:
-            db.set_last_notif(acc["id"], ns[0].id)
-        max_id = ns[-1]
-        for n in ns:
-            if (
-                n.type == "mention"
-                and n.status.visibility == Visibility.DIRECT
-                and len(n.status.mentions) == 1
-            ):
-                dmsgs.append(n.status)
-            else:
-                notifications.append(n)
-    for dm in reversed(dmsgs):
-        text = f"{get_name(dm.account)}:\n\n"
-
-        media_urls = "\n".join(media.url for media in dm.media_attachments)
-        if media_urls:
-            text += media_urls + "\n\n"
-
-        soup = BeautifulSoup(dm.content, "html.parser")
-        accts = {e.url: "@" + e.acct for e in dm.mentions}
-        for a in soup("a", class_="u-url"):
-            name = accts.get(a["href"])
-            if name:
-                a.string = name
-        for br in soup("br"):
-            br.replace_with("\n")
-        for p in soup("p"):
-            p.replace_with(p.get_text() + "\n\n")
-        text += soup.get_text()
-        text += f"\n\n[{v2emoji[dm.visibility]} {dm.created_at.strftime(STRFORMAT)}]\n"
-        text += f"⭐ /m_star_{acc['id']}_{dm.id}\n"
-
-        pv = db.get_pchat_by_contact(acc["id"], dm.account.acct)
-        if pv:
-            g = bot.get_chat(pv["id"])
-            if g is None:
-                db.remove_pchat(pv["id"])
-            else:
-                g.send_text(text)
+    rel = masto.account_relationships(user)[0] if user.id != me.id else None
+    text = f"{_get_name(user)}:\n\n"
+    fields = ""
+    for f in user.fields:
+        fields += f"{html2text(f.name).strip()}: {html2text(f.value).strip()}\n"
+    if fields:
+        text += fields + "\n\n"
+    text += html2text(user.note).strip()
+    text += f"\n\nToots: {user.statuses_count}\nFollowing: {user.following_count}\nFollowers: {user.followers_count}"
+    if user.id != me.id:
+        if rel["followed_by"]:
+            text += "\n[follows you]"
+        elif rel["blocked_by"]:
+            text += "\n[blocked you]"
+        text += "\n"
+        if rel["following"] or rel["requested"]:
+            action = "unfollow"
         else:
-            url = rmprefix(acc["api_url"], "https://")
-            g = bot.create_group(f"🇲 {dm.account.acct} ({url})", [acc["addr"]])
-            db.add_pchat(g.id, dm.account.acct, acc["id"])
-
-            r = requests.get(dm.account.avatar_static)
-            with NamedTemporaryFile(
-                dir=bot.account.get_blobdir(), suffix=".jpg", delete=False
-            ) as file:
-                path = file.name
-            with open(path, "wb") as file:
-                file.write(r.content)
-            try:
-                g.set_profile_image(path)
-            except ValueError as err:
-                bot.logger.exception(err)
-
-            g.send_text(text)
-
-    bot.logger.debug(
-        "Notifications: %s new entries (last id: %s)",
-        len(notifications),
-        acc["last_notif"],
-    )
-    if notifications:
-        bot.get_chat(acc["notif"]).send_text(
-            TOOT_SEP.join(toots2text(notifications, acc["id"], True))
-        )
+            action = "follow"
+        prefix = getdefault(bot, "cmd_prefix", "")
+        text += f"\n/{prefix}{action}_{user.id}"
+        action = "unmute" if rel["muting"] else "mute"
+        text += f"\n/{prefix}{action}_{user.id}"
+        action = "unblock" if rel["blocking"] else "block"
+        text += f"\n/{prefix}{action}_{user.id}"
+        text += f"\n/{prefix}dm_{user.id}"
+    text += TOOT_SEP
+    toots = masto.account_statuses(user, limit=10)
+    text += TOOT_SEP.join(toots2text(bot, toots))
+    return text
 
 
-def _check_home(
-    db: DBManager, bot: DeltaBot, acc: sqlite3.Row, m: mastodon.Mastodon
-) -> None:
-    me = m.me()
-    max_id = None
-    toots: list = []
+def listen_to_mastodon(bot: DeltaBot) -> None:
     while True:
-        ts = m.timeline_home(max_id=max_id, since_id=acc["last_home"])
-        if not ts:
-            break
-        if max_id is None:
-            db.set_last_home(acc["id"], ts[0].id)
-        max_id = ts[-1]
-        for t in ts:
-            for a in t.mentions:
-                if a.id == me.id:
-                    break
-            else:
-                toots.append(t)
-    bot.logger.debug("Home: %s new entries (last id: %s)", len(toots), acc["last_home"])
-    if toots:
-        bot.get_chat(acc["home"]).send_text(TOOT_SEP.join(toots2text(toots, acc["id"])))
-
-
-def listen_to_mastodon(db: DBManager, bot: DeltaBot) -> None:
-    while True:
-        bot.logger.info("Checking Mastodon")
+        bot.logger.debug("Checking Mastodon")
         instances: dict = {}
-        for acc in db.get_accounts():
-            instances.setdefault(acc["api_url"], []).append(acc)
+        with session_scope() as session:
+            for acc in session.query(Account):
+                instances.setdefault(acc.url, []).append(
+                    (
+                        acc.addr,
+                        acc.token,
+                        acc.home,
+                        acc.last_home,
+                        acc.notifications,
+                        acc.last_notif,
+                    )
+                )
         while instances:
             for key in list(instances.keys()):
                 if not instances[key]:
                     instances.pop(key)
                     continue
-                acc = instances[key].pop()
+                addr, token, home_chat, last_home, notif_chat, last_notif = instances[
+                    key
+                ].pop()
                 try:
-                    m = get_session(db, acc)
-                    _check_notifications(db, bot, acc, m)
-                    _check_home(db, bot, acc, m)
-                except (mastodon.MastodonUnauthorizedError, mastodon.MastodonAPIError):
-                    db.remove_account(acc["id"])
-                    bot.get_chat(acc["addr"]).send_text(
-                        "ERROR! You have been logged out from: " + acc["api_url"]
-                    )
+                    masto = get_mastodon(key, token)
+                    _check_notifications(bot, masto, addr, notif_chat, last_notif)
+                    _check_home(bot, masto, addr, home_chat, last_home)
                 except Exception as ex:  # noqa
                     bot.logger.exception(ex)
+                    bot.get_chat(addr).send_text(
+                        f"❌ ERROR while checking your account: {ex}"
+                    )
             time.sleep(2)
         time.sleep(int(getdefault(bot, "delay")))
 
 
 def send_toot(
-    masto: mastodon.Mastodon,
+    masto: Mastodon,
     text: str = None,
     filename: str = None,
     visibility: str = None,
@@ -312,20 +223,181 @@ def send_toot(
             masto.status_post(text, visibility=visibility)
 
 
-def get_session(db: DBManager, acc) -> mastodon.Mastodon:
-    client = db.get_client(acc["api_url"])
+def get_client(session, api_url) -> tuple:
+    client = session.query(Client).filter_by(url=api_url).first()
     if client:
-        client_id, client_secret = client["id"], client["secret"]
-    else:
-        client_id, client_secret = mastodon.Mastodon.create_app(
-            "DeltaChat Bridge", api_base_url=acc["api_url"]
+        return client.id, client.secret
+
+    try:
+        client_id, client_secret = Mastodon.create_app(
+            "DeltaChat Bridge", api_base_url=api_url
         )
-        db.add_client(acc["api_url"], client_id, client_secret)
-    m = mastodon.Mastodon(
-        client_id=client_id,
-        client_secret=client_secret,
-        api_base_url=acc["api_url"],
+    except Exception:  # noqa
+        client_id, client_secret = None, None
+    session.add(Client(url=api_url, id=client_id, secret=client_secret))
+    return client_id, client_secret
+
+
+def get_mastodon(api_url: str, token: str = None) -> Mastodon:
+    return Mastodon(
+        access_token=token,
+        api_base_url=api_url,
         ratelimit_method="throw",
     )
-    m.log_in(acc["email"], acc["password"])
-    return m
+
+
+def get_mastodon_from_msg(message: Message) -> Optional[Mastodon]:
+    addr = message.get_sender_contact().addr
+    api_url, token = "", ""
+    with session_scope() as session:
+        acc = session.query(Account).filter_by(addr=addr).first()
+        if acc:
+            api_url, token = acc.url, acc.token
+
+    return get_mastodon(api_url, token) if api_url else None
+
+
+def account_action(action: str, payload: str, message: Message) -> str:
+    if not payload:
+        return "❌ Wrong usage"
+
+    masto = get_mastodon_from_msg(message)
+    if masto:
+        if payload.isdigit():
+            user_id = payload
+        else:
+            user_id = get_user(masto, payload)
+            if user_id is None:
+                return "❌ Invalid user"
+        getattr(masto, action)(user_id)
+        return ""
+    return "❌ You are not logged in"
+
+
+def _get_name(macc) -> str:
+    isbot = "[BOT] " if macc.bot else ""
+    if macc.display_name:
+        return isbot + f"{macc.display_name} (@{macc.acct})"
+    return isbot + macc.acct
+
+
+def _handle_dms(dms: list, bot: DeltaBot, addr: str) -> None:
+    prefix = getdefault(bot, "cmd_prefix", "")
+    for dm in reversed(dms):
+        text = f"{_get_name(dm.account)}:\n\n"
+
+        media_urls = "\n".join(media.url for media in dm.media_attachments)
+        if media_urls:
+            text += media_urls + "\n\n"
+
+        soup = BeautifulSoup(dm.content, "html.parser")
+        accts = {e.url: "@" + e.acct for e in dm.mentions}
+        for a in soup("a", class_="u-url"):
+            name = accts.get(a["href"])
+            if name:
+                a.string = name
+        for br in soup("br"):
+            br.replace_with("\n")
+        for p in soup("p"):
+            p.replace_with(p.get_text() + "\n\n")
+        text += soup.get_text()
+        text += f"\n\n[{v2emoji[dm.visibility]} {dm.created_at.strftime(STRFORMAT)}]\n"
+        text += f"⭐ /{prefix}star_{dm.id}\n"
+
+        chat_id = 0
+        with session_scope() as session:
+            dmchat = (
+                session.query(DmChat)
+                .filter_by(acc_addr=addr, contact=dm.account.acct)
+                .first()
+            )
+            if dmchat:
+                chat_id = dmchat.chat_id
+
+        if chat_id:
+            bot.get_chat(chat_id).send_text(text)
+        else:
+            chat = bot.create_group(f"🇲 {dm.account.acct}", [addr])
+            with session_scope() as session:
+                session.add(
+                    DmChat(chat_id=chat.id, contact=dm.account.acct, acc_addr=addr)
+                )
+
+            with requests.get(dm.account.avatar_static) as resp:
+                with NamedTemporaryFile(
+                    dir=bot.account.get_blobdir(), suffix=".jpg", delete=False
+                ) as file:
+                    path = file.name
+                with open(path, "wb") as file:
+                    file.write(resp.content)
+                try:
+                    chat.set_profile_image(path)
+                except ValueError as err:
+                    bot.logger.exception(err)
+
+            chat.send_text(text)
+
+
+def _check_notifications(
+    bot: DeltaBot, masto: Mastodon, addr: str, notif_chat: int, last_notif: str
+) -> None:
+    max_id = None
+    dms = []
+    notifications = []
+    while True:
+        ns = masto.notifications(max_id=max_id, since_id=last_notif)
+        if not ns:
+            break
+        if max_id is None:
+            with session_scope() as session:
+                acc = session.query(Account).filter_by(addr=addr).first()
+                acc.last_notif = ns[0].id
+        max_id = ns[-1]
+        for n in ns:
+            if (
+                n.type == "mention"
+                and n.status.visibility == Visibility.DIRECT
+                and len(n.status.mentions) == 1
+            ):
+                dms.append(n.status)
+            else:
+                notifications.append(n)
+
+    if dms:
+        _handle_dms(dms, bot, addr)
+
+    bot.logger.debug(
+        "Notifications: %s new entries (last id: %s)",
+        len(notifications),
+        last_notif,
+    )
+    if notifications:
+        bot.get_chat(notif_chat).send_text(
+            TOOT_SEP.join(toots2text(bot, notifications, True))
+        )
+
+
+def _check_home(
+    bot: DeltaBot, masto: Mastodon, addr: str, home_chat: int, last_home: str
+) -> None:
+    me = masto.me()
+    max_id = None
+    toots: list = []
+    while True:
+        ts = masto.timeline_home(max_id=max_id, since_id=last_home)
+        if not ts:
+            break
+        if max_id is None:
+            with session_scope() as session:
+                acc = session.query(Account).filter_by(addr=addr).first()
+                acc.last_home = ts[0].id
+        max_id = ts[-1]
+        for t in ts:
+            for a in t.mentions:
+                if a.id == me.id:
+                    break
+            else:
+                toots.append(t)
+    bot.logger.debug("Home: %s new entries (last id: %s)", len(toots), last_home)
+    if toots:
+        bot.get_chat(home_chat).send_text(TOOT_SEP.join(toots2text(bot, toots)))
