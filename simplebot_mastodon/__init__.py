@@ -27,6 +27,7 @@ from .util import (
     normalize_url,
     send_toot,
     toots2text,
+    get_extension,
 )
 
 try:
@@ -346,12 +347,13 @@ def dm_cmd(bot: DeltaBot, payload: str, message: Message, replies: Replies) -> N
                 chat = bot.get_chat(dmchat.chat_id)
                 replies.add(text="❌ Chat already exists, send messages here", chat=chat)
                 return
-            chat = bot.create_group(f"🇲 {user.acct}", [addr])
+            chat = bot.create_group(user.acct, [addr])
             session.add(DmChat(chat_id=chat.id, contact=user.acct, acc_addr=addr))
 
         with requests.get(user.avatar_static) as resp:
+            ext = get_extension(resp) or ".jpg"
             with NamedTemporaryFile(
-                dir=bot.account.get_blobdir(), suffix=".jpg", delete=False
+                dir=bot.account.get_blobdir(), suffix=ext, delete=False
             ) as file:
                 path = file.name
             with open(path, "wb") as file:

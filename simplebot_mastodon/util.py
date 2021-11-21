@@ -1,6 +1,8 @@
 """Utilities"""
 
+import re
 import time
+import mimetypes
 from enum import Enum
 from tempfile import NamedTemporaryFile
 from typing import Any, Generator, Optional
@@ -87,6 +89,20 @@ def toots2text(bot: DeltaBot, toots: list, notifications: bool = False) -> Gener
             text += f"⏫ /{prefix}open_{t.id}\n"
 
         yield text
+
+
+def get_extension(resp: requests.Response) -> str:
+    disp = resp.headers.get("content-disposition")
+    if disp is not None and re.findall("filename=(.+)", disp):
+        fname = re.findall("filename=(.+)", disp)[0].strip('"')
+    else:
+        fname = resp.url.split("/")[-1].split("?")[0].split("#")[0]
+    if "." in fname:
+        ext = "." + fname.rsplit(".", maxsplit=1)[-1]
+    else:
+        ctype = resp.headers.get("content-type", "").split(";")[0].strip().lower()
+        ext = mimetypes.guess_extension(ctype) or ""
+    return ext
 
 
 def get_user(m, user_id) -> Any:
@@ -323,8 +339,9 @@ def _handle_dms(dms: list, bot: DeltaBot, addr: str) -> None:
                 )
 
             with requests.get(dm.account.avatar_static) as resp:
+                ext = get_extension(resp) or ".jpg"
                 with NamedTemporaryFile(
-                    dir=bot.account.get_blobdir(), suffix=".jpg", delete=False
+                    dir=bot.account.get_blobdir(), suffix=ext, delete=False
                 ) as file:
                     path = file.name
                 with open(path, "wb") as file:
