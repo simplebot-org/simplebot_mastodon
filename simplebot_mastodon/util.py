@@ -284,8 +284,7 @@ def _get_name(macc) -> str:
 def _handle_dms(dms: list, bot: DeltaBot, addr: str) -> None:
     prefix = getdefault(bot, "cmd_prefix", "")
     for dm in reversed(dms):
-        text = f"{_get_name(dm.account)}:\n\n"
-
+        text = ""
         media_urls = "\n".join(media.url for media in dm.media_attachments)
         if media_urls:
             text += media_urls + "\n\n"
@@ -317,7 +316,7 @@ def _handle_dms(dms: list, bot: DeltaBot, addr: str) -> None:
         if chat_id:
             bot.get_chat(chat_id).send_text(text)
         else:
-            chat = bot.create_group(f"🇲 {dm.account.acct}", [addr])
+            chat = bot.create_group(dm.account.acct, [addr])
             with session_scope() as session:
                 session.add(
                     DmChat(chat_id=chat.id, contact=dm.account.acct, acc_addr=addr)
