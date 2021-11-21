@@ -141,6 +141,10 @@ def filter_messages(message: Message, replies: Replies) -> None:
     When a Mastodon user writes a private/direct message to you, a chat will be created for your private conversation with that user.
     """
     if not message.chat.is_group():
+        replies.add(
+            text="❌ To publish messages you must send them in your Home chat.",
+            quote=message,
+        )
         return
 
     api_url: str = ""
