@@ -6,7 +6,6 @@ from threading import Thread
 from typing import List
 
 import mastodon
-import requests
 import simplebot
 from deltachat import Chat, Contact, Message
 from pkg_resources import DistributionNotFound, get_distribution
@@ -18,6 +17,7 @@ from .util import (
     Visibility,
     account_action,
     get_client,
+    get_extension,
     get_mastodon,
     get_mastodon_from_msg,
     get_profile,
@@ -27,7 +27,7 @@ from .util import (
     normalize_url,
     send_toot,
     toots2text,
-    get_extension,
+    web,
 )
 
 try:
@@ -258,7 +258,9 @@ def login_cmd(bot: DeltaBot, payload: str, message: Message, replies: Replies) -
         session.add(acc)
 
     hgroup.set_profile_image(MASTODON_LOGO)
-    replies.add(text=f"ℹ️ Messages sent here will be published in {api_url}", chat=hgroup)
+    replies.add(
+        text=f"ℹ️ Messages sent here will be published in {api_url}", chat=hgroup
+    )
 
     ngroup.set_profile_image(MASTODON_LOGO)
     replies.add(
@@ -356,7 +358,7 @@ def dm_cmd(bot: DeltaBot, payload: str, message: Message, replies: Replies) -> N
             chat = bot.create_group(user.acct, [addr])
             session.add(DmChat(chat_id=chat.id, contact=user.acct, acc_addr=addr))
 
-        with requests.get(user.avatar_static) as resp:
+        with web.get(user.avatar_static) as resp:
             ext = get_extension(resp) or ".jpg"
             with NamedTemporaryFile(
                 dir=bot.account.get_blobdir(), suffix=ext, delete=False

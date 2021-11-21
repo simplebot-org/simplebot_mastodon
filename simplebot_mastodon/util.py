@@ -1,8 +1,9 @@
 """Utilities"""
 
+import functools
+import mimetypes
 import re
 import time
-import mimetypes
 from enum import Enum
 from tempfile import NamedTemporaryFile
 from typing import Any, Generator, Optional
@@ -19,6 +20,8 @@ from .orm import Account, Client, DmChat, session_scope
 
 TOOT_SEP = "\n\n―――――――――――――――\n\n"
 STRFORMAT = "%Y-%m-%d %H:%M"
+web = requests.Session()
+web.request = functools.partial(web.request, timeout=15)  # type: ignore
 
 
 class Visibility(str, Enum):
@@ -259,6 +262,7 @@ def get_mastodon(api_url: str, token: str = None) -> Mastodon:
         access_token=token,
         api_base_url=api_url,
         ratelimit_method="throw",
+        session=web,
     )
 
 
@@ -338,7 +342,7 @@ def _handle_dms(dms: list, bot: DeltaBot, addr: str) -> None:
                     DmChat(chat_id=chat.id, contact=dm.account.acct, acc_addr=addr)
                 )
 
-            with requests.get(dm.account.avatar_static) as resp:
+            with web.get(dm.account.avatar_static) as resp:
                 ext = get_extension(resp) or ".jpg"
                 with NamedTemporaryFile(
                     dir=bot.account.get_blobdir(), suffix=ext, delete=False
