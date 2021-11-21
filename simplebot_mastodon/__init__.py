@@ -109,6 +109,7 @@ def deltabot_member_removed(
         return
 
     url = ""
+    chats: List[int] = []
     with session_scope() as session:
         acc = (
             session.query(Account)
@@ -118,18 +119,24 @@ def deltabot_member_removed(
         if acc:
             url = acc.url
             addr = acc.addr
+            chats.extend(dmchat.chat_id for dmchat in acc.dm_chats)
+            chats.append(acc.home)
+            chats.append(acc.notifications)
             session.delete(acc)
         else:
             dmchat = session.query(DmChat).filter_by(chat_id=chat.id).first()
             if dmchat:
+                chats.append(chat.id)
                 session.delete(dmchat)
 
-    if url:
+    for chat_id in chats:
         try:
-            chat.remove_contact(bot.self_contact)
+            bot.get_chat(chat_id).remove_contact(bot.self_contact)
         except ValueError:
             pass
-        replies.add(text=f"✔️ You have logged out from: {url}", chat=bot.get_chat(addr))
+
+    if url:
+        replies.add(text=f"✔️ You logged out from: {url}", chat=bot.get_chat(addr))
 
 
 @simplebot.filter
@@ -276,8 +283,7 @@ def logout_cmd(bot: DeltaBot, message: Message, replies: Replies) -> None:
 
     for chat_id in chats:
         try:
-            chat = bot.get_chat(chat_id)
-            chat.remove_contact(bot.self_contact)
+            bot.get_chat(chat_id).remove_contact(bot.self_contact)
         except ValueError:
             pass
     replies.add(text=text, chat=bot.get_chat(addr))
