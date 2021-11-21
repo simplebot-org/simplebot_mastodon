@@ -155,7 +155,7 @@ def filter_messages(message: Message, replies: Replies) -> None:
         )
         if acc:
             if acc.home == message.chat.id:
-                api_url = acc.api_url
+                api_url = acc.url
                 token = acc.token
                 args: tuple = (message.text, message.filename)
             else:
@@ -166,7 +166,7 @@ def filter_messages(message: Message, replies: Replies) -> None:
         else:
             dmchat = session.query(DmChat).filter_by(chat_id=message.chat.id).first()
             if dmchat:
-                api_url = dmchat.account.api_url
+                api_url = dmchat.account.url
                 token = dmchat.account.token
                 args = (
                     f"@{dmchat.contact} {message.text}",
