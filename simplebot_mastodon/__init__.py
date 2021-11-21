@@ -42,29 +42,52 @@ def deltabot_init(bot: DeltaBot) -> None:
     getdefault(bot, "delay", "30")
     getdefault(bot, "max_users", "-1")
     getdefault(bot, "max_users_instance", "-1")
-    prefix = getdefault(bot, "cmd_prefix", "")
+    pref = getdefault(bot, "cmd_prefix", "")
 
-    desc = f"Login on Mastodon.\n\nExample:\n/{prefix}login mastodon.social me@example.com myPassw0rd"
-    bot.commands.register(func=login_cmd, name=f"/{prefix}login", help=desc)
-    bot.commands.register(func=logout_cmd, name=f"/{prefix}logout")
-    bot.commands.register(func=bio_cmd, name=f"/{prefix}bio")
-    bot.commands.register(func=avatar_cmd, name=f"/{prefix}avatar")
-    bot.commands.register(func=dm_cmd, name=f"/{prefix}dm")
-    bot.commands.register(func=reply_cmd, name=f"/{prefix}reply")
-    bot.commands.register(func=star_cmd, name=f"/{prefix}star")
-    bot.commands.register(func=boost_cmd, name=f"/{prefix}boost")
-    bot.commands.register(func=open_cmd, name=f"/{prefix}open")
-    bot.commands.register(func=follow_cmd, name=f"/{prefix}follow")
-    bot.commands.register(func=unfollow_cmd, name=f"/{prefix}unfollow")
-    bot.commands.register(func=mute_cmd, name=f"/{prefix}mute")
-    bot.commands.register(func=unmute_cmd, name=f"/{prefix}unmute")
-    bot.commands.register(func=block_cmd, name=f"/{prefix}block")
-    bot.commands.register(func=unblock_cmd, name=f"/{prefix}unblock")
-    bot.commands.register(func=profile_cmd, name=f"/{prefix}profile")
-    bot.commands.register(func=local_cmd, name=f"/{prefix}local")
-    bot.commands.register(func=public_cmd, name=f"/{prefix}public")
-    bot.commands.register(func=tag_cmd, name=f"/{prefix}tag")
-    bot.commands.register(func=search_cmd, name=f"/{prefix}search")
+    bot.commands.register(func=logout_cmd, name=f"/{pref}logout")
+    bot.commands.register(func=reply_cmd, name=f"/{pref}reply")
+    bot.commands.register(func=star_cmd, name=f"/{pref}star")
+    bot.commands.register(func=boost_cmd, name=f"/{pref}boost")
+    bot.commands.register(func=open_cmd, name=f"/{pref}open")
+    bot.commands.register(func=avatar_cmd, name=f"/{pref}avatar")
+    bot.commands.register(func=local_cmd, name=f"/{pref}local")
+    bot.commands.register(func=public_cmd, name=f"/{pref}public")
+
+    desc = f"Login on Mastodon.\n\nExample:\n/{pref}login mastodon.social me@example.com myPassw0rd"
+    bot.commands.register(func=login_cmd, name=f"/{pref}login", help=desc)
+
+    desc = f"Update your Mastodon biography.\n\nExample:\n/{pref}bio I love Delta Chat"
+    bot.commands.register(func=bio_cmd, name=f"/{pref}bio", help=desc)
+
+    desc = f"Start a private chat with the given Mastodon user.\n\nExample:\n/{pref}dm user@mastodon.social"
+    bot.commands.register(func=dm_cmd, name=f"/{pref}dm", help=desc)
+
+    desc = f"Follow the user with the given account name or id.\n\nExample:\n/{pref}follow user@mastodon.social"
+    bot.commands.register(func=follow_cmd, name=f"/{pref}follow", help=desc)
+
+    desc = f"Unfollow the user with the given account name or id.\n\nExample:\n/{pref}unfollow user@mastodon.social"
+    bot.commands.register(func=unfollow_cmd, name=f"/{pref}unfollow", help=desc)
+
+    desc = f"Mute the user with the given account name or id.\n\nExample:\n/{pref}mute user@mastodon.social"
+    bot.commands.register(func=mute_cmd, name=f"/{pref}mute", help=desc)
+
+    desc = f"Unmute the user with the given account name or id.\n\nExample:\n/{pref}unmute user@mastodon.social"
+    bot.commands.register(func=unmute_cmd, name=f"/{pref}unmute", help=desc)
+
+    desc = f"Block the user with the given account name or id.\n\nExample:\n/{pref}block user@mastodon.social"
+    bot.commands.register(func=block_cmd, name=f"/{pref}block", help=desc)
+
+    desc = f"Unblock the user with the given account name or id.\n\nExample:\n/{pref}unblock user@mastodon.social"
+    bot.commands.register(func=unblock_cmd, name=f"/{pref}unblock", help=desc)
+
+    desc = f"See the profile of the given user.\n\nExample:\n/{pref}profile user@mastodon.social"
+    bot.commands.register(func=profile_cmd, name=f"/{pref}profile", help=desc)
+
+    desc = f"Get latest entries with the given hashtags.\n\nExamples:\n/{pref}tag deltachat\n/{pref}tag mastocat"
+    bot.commands.register(func=tag_cmd, name=f"/{pref}tag", help=desc)
+
+    desc = f"Search for users and hashtags matching the given text.\n\nExamples:\n/{pref}search deltachat\n/{pref}search mastocat"
+    bot.commands.register(func=search_cmd, name=f"/{pref}search", help=desc)
 
 
 @simplebot.hookimpl
@@ -109,18 +132,37 @@ def deltabot_member_removed(
 
 
 @simplebot.filter
-def filter_messages(message: Message) -> None:
-    """Process messages sent to a Mastodon chat."""
+def filter_messages(message: Message, replies: Replies) -> None:
+    """Once you log in with your Mastodon credentials, two chats will be created for you:
+
+    • The Home chat is where you will receive your Home timeline and any message you send in that chat will be published on Mastodon.
+    • The Notifications chat is where you will receive your Mastodon notifications.
+
+    When a Mastodon user writes a private/direct message to you, a chat will be created for your private conversation with that user.
+    """
     if not message.chat.is_group():
         return
 
     api_url: str = ""
     with session_scope() as session:
-        acc = session.query(Account).filter_by(home=message.chat.id).first()
+        acc = (
+            session.query(Account)
+            .filter(
+                (Account.home == message.chat.id)
+                | (Account.notifications == message.chat.id)
+            )
+            .first()
+        )
         if acc:
-            api_url = acc.api_url
-            token = acc.token
-            args: tuple = (message.text, message.filename)
+            if acc.home == message.chat.id:
+                api_url = acc.api_url
+                token = acc.token
+                args: tuple = (message.text, message.filename)
+            else:
+                replies.add(
+                    text="❌ To publish messages you must send them in your Home chat.",
+                    quote=message,
+                )
         else:
             dmchat = session.query(DmChat).filter_by(chat_id=message.chat.id).first()
             if dmchat:
@@ -204,7 +246,7 @@ def login_cmd(bot: DeltaBot, payload: str, message: Message, replies: Replies) -
         session.add(acc)
 
     hgroup.set_profile_image(MASTODON_LOGO)
-    replies.add(text=f"ℹ️ Messages sent here will be tooted to {api_url}", chat=hgroup)
+    replies.add(text=f"ℹ️ Messages sent here will be published in {api_url}", chat=hgroup)
 
     ngroup.set_profile_image(MASTODON_LOGO)
     replies.add(
@@ -237,7 +279,6 @@ def logout_cmd(bot: DeltaBot, message: Message, replies: Replies) -> None:
 
 
 def bio_cmd(payload: str, message: Message, replies: Replies) -> None:
-    """Update your Mastodon biography."""
     if not payload:
         replies.add(text="❌ Wrong usage", quote=message)
         return
@@ -255,10 +296,13 @@ def bio_cmd(payload: str, message: Message, replies: Replies) -> None:
 
 
 def avatar_cmd(message: Message, replies: Replies) -> None:
-    """Update your Mastodon avatar."""
+    """Update your Mastodon avatar.
+
+    In addition to this command, you must attach the avatar image you want to set.
+    """
     if not message.filename:
         replies.add(
-            text="❌ You must send an avatar attached to your messagee", quote=message
+            text="❌ You must send an avatar attached to your message", quote=message
         )
         return
 
@@ -275,7 +319,6 @@ def avatar_cmd(message: Message, replies: Replies) -> None:
 
 
 def dm_cmd(bot: DeltaBot, payload: str, message: Message, replies: Replies) -> None:
-    """Start a private chat with the given Mastodon user."""
     if not payload:
         replies.add(text="❌ Wrong usage", quote=message)
         return
@@ -360,7 +403,7 @@ def boost_cmd(payload: str, message: Message, replies: Replies) -> None:
 
 
 def open_cmd(bot: DeltaBot, payload: str, message: Message, replies: Replies) -> None:
-    """Get the context of the toot with the given id."""
+    """Open the thread of the toot with the given id."""
     if not payload:
         replies.add(text="❌ Wrong usage", quote=message)
     else:
@@ -378,7 +421,6 @@ def open_cmd(bot: DeltaBot, payload: str, message: Message, replies: Replies) ->
 
 
 def follow_cmd(payload: str, message: Message, replies: Replies) -> None:
-    """Follow the user with the given id."""
     replies.add(
         text=account_action("account_follow", payload, message) or "✔️ User followed",
         quote=message,
@@ -386,7 +428,6 @@ def follow_cmd(payload: str, message: Message, replies: Replies) -> None:
 
 
 def unfollow_cmd(payload: str, message: Message, replies: Replies) -> None:
-    """Unfollow the user with the given id."""
     replies.add(
         text=account_action("account_unfollow", payload, message)
         or "✔️ User unfollowed",
@@ -395,7 +436,6 @@ def unfollow_cmd(payload: str, message: Message, replies: Replies) -> None:
 
 
 def mute_cmd(payload: str, message: Message, replies: Replies) -> None:
-    """Mute the user with the given id."""
     replies.add(
         text=account_action("account_mute", payload, message) or "✔️ User muted",
         quote=message,
@@ -403,7 +443,6 @@ def mute_cmd(payload: str, message: Message, replies: Replies) -> None:
 
 
 def unmute_cmd(payload: str, message: Message, replies: Replies) -> None:
-    """Unmute the user with the given id."""
     replies.add(
         text=account_action("account_unmute", payload, message) or "✔️ User unmuted",
         quote=message,
@@ -411,7 +450,6 @@ def unmute_cmd(payload: str, message: Message, replies: Replies) -> None:
 
 
 def block_cmd(payload: str, message: Message, replies: Replies) -> None:
-    """Block the user with the given id."""
     replies.add(
         text=account_action("account_block", payload, message) or "✔️ User blocked",
         quote=message,
@@ -419,7 +457,6 @@ def block_cmd(payload: str, message: Message, replies: Replies) -> None:
 
 
 def unblock_cmd(payload: str, message: Message, replies: Replies) -> None:
-    """Unblock the user with the given id."""
     replies.add(
         text=account_action("account_unblock", payload, message) or "✔️ User unblocked",
         quote=message,
@@ -429,7 +466,6 @@ def unblock_cmd(payload: str, message: Message, replies: Replies) -> None:
 def profile_cmd(
     bot: DeltaBot, payload: str, message: Message, replies: Replies
 ) -> None:
-    """See the profile of the given user."""
     masto = get_mastodon_from_msg(message)
     if masto:
         text = get_profile(bot, masto, payload)
@@ -463,7 +499,6 @@ def public_cmd(bot: DeltaBot, message: Message, replies: Replies) -> None:
 
 
 def tag_cmd(bot: DeltaBot, payload: str, message: Message, replies: Replies) -> None:
-    """Get latest entries with the given hashtags."""
     if not payload:
         replies.add(text="❌ Wrong usage", quote=message)
         return
@@ -481,7 +516,6 @@ def tag_cmd(bot: DeltaBot, payload: str, message: Message, replies: Replies) -> 
 
 
 def search_cmd(bot: DeltaBot, payload: str, message: Message, replies: Replies) -> None:
-    """Search for users and hashtags matching the given text."""
     if not payload:
         replies.add(text="❌ Wrong usage", quote=message)
         return
