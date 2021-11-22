@@ -399,7 +399,7 @@ def star_cmd(payload: str, message: Message, replies: Replies) -> None:
     else:
         masto = get_mastodon_from_msg(message)
         if masto:
-            masto.status_favourite(int(payload))
+            masto.status_favourite(payload)
         else:
             replies.add(text="❌ You are not logged in", quote=message)
 
@@ -411,7 +411,7 @@ def boost_cmd(payload: str, message: Message, replies: Replies) -> None:
     else:
         masto = get_mastodon_from_msg(message)
         if masto:
-            masto.status_reblog(int(payload))
+            masto.status_reblog(payload)
         else:
             replies.add(text="❌ You are not logged in", quote=message)
 
@@ -423,7 +423,7 @@ def open_cmd(bot: DeltaBot, payload: str, message: Message, replies: Replies) ->
     else:
         masto = get_mastodon_from_msg(message)
         if masto:
-            toots = masto.status_context(int(payload))["ancestors"]
+            toots = masto.status_context(payload)["ancestors"]
             replies.add(
                 text=TOOT_SEP.join(toots2text(bot, toots[-3:]))
                 if toots
