@@ -12,7 +12,7 @@ import requests
 from bs4 import BeautifulSoup
 from deltachat import Message
 from html2text import html2text
-from mastodon import Mastodon
+from mastodon import Mastodon, MastodonNetworkError
 from pydub import AudioSegment
 from simplebot.bot import DeltaBot
 
@@ -207,6 +207,8 @@ def listen_to_mastodon(bot: DeltaBot) -> None:
                     masto = get_mastodon(key, token)
                     _check_notifications(bot, masto, addr, notif_chat, last_notif)
                     _check_home(bot, masto, addr, home_chat, last_home)
+                except MastodonNetworkError as ex:
+                    bot.logger.exception(ex)
                 except Exception as ex:  # noqa
                     bot.logger.exception(ex)
                     bot.get_chat(addr).send_text(
