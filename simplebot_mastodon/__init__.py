@@ -1,7 +1,6 @@
 """hooks, filters and commands"""
 
 import os
-from tempfile import NamedTemporaryFile
 from threading import Thread
 from typing import List
 
@@ -16,8 +15,8 @@ from .util import (
     TOOT_SEP,
     Visibility,
     account_action,
+    download_image,
     get_client,
-    get_extension,
     get_mastodon,
     get_mastodon_from_msg,
     get_profile,
@@ -27,7 +26,6 @@ from .util import (
     normalize_url,
     send_toot,
     toots2text,
-    web,
 )
 
 try:
@@ -358,14 +356,7 @@ def dm_cmd(bot: DeltaBot, payload: str, message: Message, replies: Replies) -> N
             chat = bot.create_group(user.acct, [addr])
             session.add(DmChat(chat_id=chat.id, contact=user.acct, acc_addr=addr))
 
-        with web.get(user.avatar_static) as resp:
-            ext = get_extension(resp) or ".jpg"
-            with NamedTemporaryFile(
-                dir=bot.account.get_blobdir(), suffix=ext, delete=False
-            ) as file:
-                path = file.name
-            with open(path, "wb") as file:
-                file.write(resp.content)
+        path = download_image(bot, user.avatar_static)
         try:
             chat.set_profile_image(path)
         except ValueError as err:

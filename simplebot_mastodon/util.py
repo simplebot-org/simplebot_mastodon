@@ -122,6 +122,19 @@ def get_user(m, user_id) -> Any:
     return user
 
 
+def download_image(bot, url) -> str:
+    """Download an image and save the file in the bot's blobs folder."""
+    with web.get(url) as resp:
+        ext = get_extension(resp) or ".jpg"
+        with NamedTemporaryFile(
+            dir=bot.account.get_blobdir(), suffix=ext, delete=False
+        ) as temp_file:
+            path = temp_file.name
+        with open(path, "wb") as file:
+            file.write(resp.content)
+    return path
+
+
 def normalize_url(url: str) -> str:
     if url.startswith("http://"):
         url = "https://" + url[4:]
@@ -344,18 +357,11 @@ def _handle_dms(dms: list, bot: DeltaBot, addr: str) -> None:
                     DmChat(chat_id=chat.id, contact=dm.account.acct, acc_addr=addr)
                 )
 
-            with web.get(dm.account.avatar_static) as resp:
-                ext = get_extension(resp) or ".jpg"
-                with NamedTemporaryFile(
-                    dir=bot.account.get_blobdir(), suffix=ext, delete=False
-                ) as file:
-                    path = file.name
-                with open(path, "wb") as file:
-                    file.write(resp.content)
-                try:
-                    chat.set_profile_image(path)
-                except ValueError as err:
-                    bot.logger.exception(err)
+            path = download_image(bot, dm.account.avatar_static)
+            try:
+                chat.set_profile_image(path)
+            except ValueError as err:
+                bot.logger.exception(err)
 
             chat.send_text(text)
 
