@@ -4,11 +4,12 @@ import os
 from threading import Thread
 from typing import List
 
-import mastodon
 import simplebot
 from deltachat import Chat, Contact, Message
 from pkg_resources import DistributionNotFound, get_distribution
 from simplebot.bot import DeltaBot, Replies
+
+import mastodon
 
 from .orm import Account, DmChat, init, session_scope
 from .util import (
