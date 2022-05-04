@@ -1,7 +1,7 @@
 simplebot==2.4.0
 Mastodon.py==1.5.1
 html2text==2020.1.16
-beautifulsoup4==4.10.0
+beautifulsoup4==4.11.1
 requests==2.26.0
 pydub==0.25.1
-SQLAlchemy==1.4.29
+SQLAlchemy==1.4.36
