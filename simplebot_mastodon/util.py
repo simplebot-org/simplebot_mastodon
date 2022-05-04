@@ -6,15 +6,22 @@ import re
 import time
 from enum import Enum
 from tempfile import NamedTemporaryFile
-from typing import Any, Generator, Optional
+from typing import Any, Generator, List, Optional
 
 import requests
 from bs4 import BeautifulSoup
 from deltachat import Message
 from html2text import html2text
-from mastodon import Mastodon, MastodonInternalServerError, MastodonNetworkError
 from pydub import AudioSegment
 from simplebot.bot import DeltaBot
+
+from mastodon import (
+    Mastodon,
+    MastodonInternalServerError,
+    MastodonNetworkError,
+    MastodonServiceUnavailableError,
+    MastodonUnauthorizedError,
+)
 
 from .orm import Account, Client, DmChat, session_scope
 
@@ -197,6 +204,7 @@ def listen_to_mastodon(bot: DeltaBot) -> None:
         bot.logger.debug("Checking Mastodon")
         instances: dict = {}
         with session_scope() as session:
+            bot.logger.debug("Accounts to check: %s", session.query(Account).count())
             for acc in session.query(Account):
                 instances.setdefault(acc.url, []).append(
                     (
@@ -216,19 +224,45 @@ def listen_to_mastodon(bot: DeltaBot) -> None:
                 addr, token, home_chat, last_home, notif_chat, last_notif = instances[
                     key
                 ].pop()
+                bot.logger.debug(f"Checking account from: {addr}")
                 try:
                     masto = get_mastodon(key, token)
                     _check_notifications(bot, masto, addr, notif_chat, last_notif)
                     _check_home(bot, masto, addr, home_chat, last_home)
-                except (MastodonNetworkError, MastodonInternalServerError) as ex:
+                except (
+                    MastodonNetworkError,
+                    MastodonInternalServerError,
+                    MastodonServiceUnavailableError,
+                ) as ex:
                     bot.logger.exception(ex)
+                except MastodonUnauthorizedError as ex:
+                    bot.logger.exception(ex)
+                    chats: List[int] = []
+                    with session_scope() as session:
+                        acc = session.query(Account).filter_by(addr=addr).first()
+                        if acc:
+                            chats.extend(dmchat.chat_id for dmchat in acc.dm_chats)
+                            chats.append(acc.home)
+                            chats.append(acc.notifications)
+                            session.delete(acc)
+                    for chat_id in chats:
+                        try:
+                            bot.get_chat(chat_id).remove_contact(bot.self_contact)
+                        except ValueError:
+                            pass
+
+                    bot.get_chat(addr).send_text(
+                        f"❌ ERROR Your account was logged out: {ex}"
+                    )
                 except Exception as ex:  # noqa
                     bot.logger.exception(ex)
                     bot.get_chat(addr).send_text(
                         f"❌ ERROR while checking your account: {ex}"
                     )
             time.sleep(2)
-        time.sleep(int(getdefault(bot, "delay")))
+        delay = int(getdefault(bot, "delay"))
+        bot.logger.info(f"Done checking Mastodon, sleeping for {delay} seconds...")
+        time.sleep(delay)
 
 
 def send_toot(
