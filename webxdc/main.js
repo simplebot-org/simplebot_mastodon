@@ -144,7 +144,7 @@ function main(data) {
     }
 
     data.toots.forEach(toot => {
-        let article = h("article", {id: toot.reblog? toot.reblog.id : toot.id, class: "w3-card-2"});
+        let article = h("article", {class: "w3-card-2"});
 
         if (data.notifications) {
             if (toot.type === "reblog") {
@@ -182,6 +182,7 @@ function main(data) {
             article.appendChild(small);
             toot = toot.reblog;
         }
+        article.setAttribute("id", toot.id)
 
         article.appendChild(h(
             "a", {class: "status-sidebar"},
