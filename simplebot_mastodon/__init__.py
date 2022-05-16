@@ -170,11 +170,6 @@ def filter_messages(message: Message, replies: Replies) -> None:
                 api_url = acc.url
                 token = acc.token
                 args: tuple = (message.text, message.filename)
-            else:
-                replies.add(
-                    text="❌ To publish messages you must send them in your Home chat.",
-                    quote=message,
-                )
         else:
             dmchat = session.query(DmChat).filter_by(chat_id=message.chat.id).first()
             if dmchat:
