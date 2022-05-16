@@ -1,9 +1,14 @@
 """Utilities"""
 
 import functools
+import json
 import mimetypes
+import os
 import re
 import time
+import zipfile
+import zlib
+from collections.abc import Mapping
 from enum import Enum
 from tempfile import NamedTemporaryFile
 from typing import Any, Generator, List, Optional
@@ -13,7 +18,7 @@ from bs4 import BeautifulSoup
 from deltachat import Message
 from html2text import html2text
 from pydub import AudioSegment
-from simplebot.bot import DeltaBot
+from simplebot.bot import DeltaBot, Replies
 
 from mastodon import (
     Mastodon,
@@ -25,10 +30,13 @@ from mastodon import (
 
 from .orm import Account, Client, DmChat, session_scope
 
+zlib.Z_DEFAULT_COMPRESSION = 9
 TOOT_SEP = "\n\n―――――――――――――――\n\n"
 STRFORMAT = "%Y-%m-%d %H:%M"
 web = requests.Session()
 web.request = functools.partial(web.request, timeout=15)  # type: ignore
+DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
+MASTODON_LOGO = os.path.join(DATA_DIR, "icon.png")
 
 
 class Visibility(str, Enum):
@@ -158,45 +166,22 @@ def getdefault(bot: DeltaBot, key: str, value: str = None) -> str:
     return val
 
 
-def get_profile(bot: DeltaBot, masto: Mastodon, username: str = None) -> str:
+def get_profile(bot: DeltaBot, masto: Mastodon, username: str = None) -> dict:
     me = masto.me()
     if not username:
         user = me
     else:
         user = get_user(masto, username)
         if user is None:
-            return "❌ Invalid user"
+            return dict(text="❌ Invalid user")
 
     rel = masto.account_relationships(user)[0] if user.id != me.id else None
-    text = f"{_get_name(user)}:\n\n"
-    fields = ""
-    for f in user.fields:
-        fields += f"{html2text(f.name).strip()}: {html2text(f.value).strip()}\n"
-    if fields:
-        text += fields + "\n\n"
-    text += html2text(user.note).strip()
-    text += f"\n\nToots: {user.statuses_count}\nFollowing: {user.following_count}\nFollowers: {user.followers_count}"
-    if user.id != me.id:
-        if rel["followed_by"]:
-            text += "\n[follows you]"
-        elif rel["blocked_by"]:
-            text += "\n[blocked you]"
-        text += "\n"
-        if rel["following"] or rel["requested"]:
-            action = "unfollow"
-        else:
-            action = "follow"
-        prefix = getdefault(bot, "cmd_prefix", "")
-        text += f"\n/{prefix}{action}_{user.id}"
-        action = "unmute" if rel["muting"] else "mute"
-        text += f"\n/{prefix}{action}_{user.id}"
-        action = "unblock" if rel["blocking"] else "block"
-        text += f"\n/{prefix}{action}_{user.id}"
-        text += f"\n/{prefix}dm_{user.id}"
-    text += TOOT_SEP
+    user["relationships"] = rel
+
     toots = masto.account_statuses(user, limit=10)
-    text += TOOT_SEP.join(toots2text(bot, toots))
-    return text
+    return dict(
+        filename=toots2xdc(bot, masto.api_base_url, me, toots, profile=user),
+    )
 
 
 def listen_to_mastodon(bot: DeltaBot) -> None:
@@ -272,23 +257,24 @@ def send_toot(
     visibility: str = None,
     in_reply_to: str = None,
 ) -> None:
+    kwargs: dict = dict(status=text, visibility=visibility)
+    if in_reply_to:
+        to_status = masto.status(in_reply_to)
+        if visibility is None and "visibility" in to_status:
+            kwargs["visibility"] = to_status.visibility
+        if "spoiler_text" in to_status:
+            kwargs["spoiler_text"] = to_status.spoiler_text
+        kwargs["in_reply_to_id"] = to_status.id
+
     if filename:
         if filename.endswith(".aac"):
             aac_file = AudioSegment.from_file(filename, "aac")
             filename = filename[:-4] + ".mp3"
             aac_file.export(filename, format="mp3")
-        media = [masto.media_post(filename).id]
-        if in_reply_to:
-            masto.status_reply(
-                masto.status(in_reply_to), text, media_ids=media, visibility=visibility
-            )
-        else:
-            masto.status_post(text, media_ids=media, visibility=visibility)
+        kwargs["media_ids"] = [masto.media_post(filename).id]
+        masto.status_post(**kwargs)
     elif text:
-        if in_reply_to:
-            masto.status_reply(masto.status(in_reply_to), text, visibility=visibility)
-        else:
-            masto.status_post(text, visibility=visibility)
+        masto.status_post(**kwargs)
 
 
 def get_client(session, api_url) -> tuple:
@@ -316,10 +302,24 @@ def get_mastodon(api_url: str, token: str = None) -> Mastodon:
 
 
 def get_mastodon_from_msg(message: Message) -> Optional[Mastodon]:
-    addr = message.get_sender_contact().addr
+    chat = message.chat
     api_url, token = "", ""
     with session_scope() as session:
-        acc = session.query(Account).filter_by(addr=addr).first()
+        if chat.is_group():
+            acc = (
+                session.query(Account)
+                .filter((Account.home == chat.id) | (Account.notifications == chat.id))
+                .first()
+            )
+            if not acc:
+                dmchat = session.query(DmChat).filter_by(chat_id=chat.id).first()
+                if dmchat:
+                    acc = dmchat.account
+        else:
+            self_cnt = chat.account.get_self_contact()
+            contacts = [cnt for cnt in chat.get_contacts() if cnt != self_cnt]
+            assert len(contacts) == 1
+            acc = session.query(Account).filter_by(addr=contacts[0].addr).first()
         if acc:
             api_url, token = acc.url, acc.token
 
@@ -350,54 +350,41 @@ def _get_name(macc) -> str:
     return isbot + macc.acct
 
 
-def _handle_dms(dms: list, bot: DeltaBot, addr: str) -> None:
-    prefix = getdefault(bot, "cmd_prefix", "")
+def _handle_dms(bot: DeltaBot, masto: Mastodon, addr: str, dms: list) -> None:
+    api_url = masto.api_base_url
+    me = masto.me()
+    senders = {}
     for dm in reversed(dms):
-        text = ""
-        media_urls = "\n".join(media.url for media in dm.media_attachments)
-        if media_urls:
-            text += media_urls + "\n\n"
-
-        soup = BeautifulSoup(dm.content, "html.parser")
-        accts = {e.url: "@" + e.acct for e in dm.mentions}
-        for a in soup("a", class_="u-url"):
-            name = accts.get(a["href"])
-            if name:
-                a.string = name
-        for br in soup("br"):
-            br.replace_with("\n")
-        for p in soup("p"):
-            p.replace_with(p.get_text() + "\n\n")
-        text += soup.get_text()
-        text += f"\n\n[{v2emoji[dm.visibility]} {dm.created_at.strftime(STRFORMAT)}]\n"
-        text += f"⭐ /{prefix}star_{dm.id}\n"
+        senders.setdefault(dm.account.acct, []).append(dm)
+    for acct, toots in senders.items():
+        replies = Replies(bot, bot.logger)
+        filename = toots2xdc(bot, api_url, me, toots)
 
         chat_id = 0
         with session_scope() as session:
             dmchat = (
-                session.query(DmChat)
-                .filter_by(acc_addr=addr, contact=dm.account.acct)
-                .first()
+                session.query(DmChat).filter_by(acc_addr=addr, contact=acct).first()
             )
             if dmchat:
                 chat_id = dmchat.chat_id
 
         if chat_id:
-            bot.get_chat(chat_id).send_text(text)
+            chat = bot.get_chat(chat_id)
         else:
-            chat = bot.create_group(dm.account.acct, [addr])
+            chat = bot.create_group(acct, [addr])
             with session_scope() as session:
-                session.add(
-                    DmChat(chat_id=chat.id, contact=dm.account.acct, acc_addr=addr)
-                )
+                session.add(DmChat(chat_id=chat.id, contact=acct, acc_addr=addr))
 
-            path = download_image(bot, dm.account.avatar_static)
+            path = download_image(bot, toots[0].account.avatar_static)
             try:
                 chat.set_profile_image(path)
             except ValueError as err:
                 bot.logger.exception(err)
 
-            chat.send_text(text)
+        replies.add(
+            text=f"{len(toots)} new private message(s)", filename=filename, chat=chat
+        )
+        replies.send_reply_messages()
 
 
 def _check_notifications(
@@ -405,7 +392,7 @@ def _check_notifications(
 ) -> None:
     max_id = None
     dms = []
-    notifications = []
+    toots = []
     while True:
         ns = masto.notifications(max_id=max_id, since_id=last_notif)
         if not ns:
@@ -423,20 +410,26 @@ def _check_notifications(
             ):
                 dms.append(n.status)
             else:
-                notifications.append(n)
+                toots.append(n)
 
     if dms:
-        _handle_dms(dms, bot, addr)
+        _handle_dms(bot, masto, addr, dms)
 
     bot.logger.debug(
         "Notifications: %s new entries (last id: %s)",
-        len(notifications),
+        len(toots),
         last_notif,
     )
-    if notifications:
-        bot.get_chat(notif_chat).send_text(
-            TOOT_SEP.join(toots2text(bot, notifications, True))
+    if toots:
+        replies = Replies(bot, bot.logger)
+        replies.add(
+            text=f"{len(toots)} new notification(s)",
+            filename=toots2xdc(
+                bot, masto.api_base_url, masto.me(), toots, notifications=True
+            ),
+            chat=bot.get_chat(notif_chat),
         )
+        replies.send_reply_messages()
 
 
 def _check_home(
@@ -462,4 +455,58 @@ def _check_home(
                 toots.append(t)
     bot.logger.debug("Home: %s new entries (last id: %s)", len(toots), last_home)
     if toots:
-        bot.get_chat(home_chat).send_text(TOOT_SEP.join(toots2text(bot, toots)))
+        replies = Replies(bot, bot.logger)
+        replies.add(
+            text=f"{len(toots)} new toots(s)",
+            filename=toots2xdc(bot, masto.api_base_url, me, toots),
+            chat=bot.get_chat(home_chat),
+        )
+        replies.send_reply_messages()
+
+
+def toots2xdc(
+    bot: DeltaBot,
+    api_url: str,
+    acct: dict,
+    toots: list,
+    title="Mastodon Bridge",
+    **kwargs,
+) -> str:
+    data = dict(
+        acct_id=acct["id"],
+        username=acct["username"],
+        server=api_url.split("://")[1].strip("/"),
+        display_name=acct["display_name"],
+        toots=toots,
+        **kwargs,
+    )
+    _prepare_json(data)
+    with NamedTemporaryFile(
+        dir=bot.account.get_blobdir(), prefix="masto-", suffix=".xdc", delete=False
+    ) as file:
+        path = file.name
+    with open(path, "wb") as f:
+        with zipfile.ZipFile(f, "w", compression=zipfile.ZIP_DEFLATED) as fzip:
+            assets = os.path.join(DATA_DIR, "assets")
+            for name in os.listdir(assets):
+                fzip.write(os.path.join(assets, name), f"assets/{name}")
+            for name in os.listdir(DATA_DIR):
+                fzip.write(os.path.join(DATA_DIR, name), name)
+            fzip.writestr("manifest.toml", f'name="{title}"')
+            fzip.writestr("data.json", json.dumps(data, default=str))
+    return path
+
+
+def _prepare_json(data) -> None:
+    if isinstance(data, list):
+        for index, value in enumerate(data):
+            if isinstance(value, Mapping) or isinstance(value, list):
+                _prepare_json(value)
+            elif type(value) is int:
+                data[index] = str(value)
+    elif isinstance(data, Mapping):
+        for key, value in data.items():
+            if isinstance(value, Mapping) or isinstance(value, list):
+                _prepare_json(value)
+            elif type(value) is int:
+                data[key] = str(value)

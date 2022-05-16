@@ -13,7 +13,7 @@ import mastodon
 
 from .orm import Account, DmChat, init, session_scope
 from .util import (
-    TOOT_SEP,
+    MASTODON_LOGO,
     Visibility,
     account_action,
     download_image,
@@ -26,7 +26,7 @@ from .util import (
     listen_to_mastodon,
     normalize_url,
     send_toot,
-    toots2text,
+    toots2xdc,
 )
 
 try:
@@ -34,7 +34,6 @@ try:
 except DistributionNotFound:
     # package is not installed
     __version__ = "0.0.0.dev0-unknown"
-MASTODON_LOGO = os.path.join(os.path.dirname(__file__), "mastodon-logo.png")
 
 
 @simplebot.hookimpl
@@ -47,7 +46,9 @@ def deltabot_init(bot: DeltaBot) -> None:
     bot.commands.register(func=logout_cmd, name=f"/{pref}logout")
     bot.commands.register(func=reply_cmd, name=f"/{pref}reply")
     bot.commands.register(func=star_cmd, name=f"/{pref}star")
+    bot.commands.register(func=unstar_cmd, name=f"/{pref}unstar")
     bot.commands.register(func=boost_cmd, name=f"/{pref}boost")
+    bot.commands.register(func=unboost_cmd, name=f"/{pref}unboost")
     bot.commands.register(func=open_cmd, name=f"/{pref}open")
     bot.commands.register(func=avatar_cmd, name=f"/{pref}avatar")
     bot.commands.register(func=local_cmd, name=f"/{pref}local")
@@ -396,6 +397,18 @@ def star_cmd(payload: str, message: Message, replies: Replies) -> None:
             replies.add(text="❌ You are not logged in", quote=message)
 
 
+def unstar_cmd(payload: str, message: Message, replies: Replies) -> None:
+    """Unmark as favourite the toot with the given id."""
+    if not payload:
+        replies.add(text="❌ Wrong usage", quote=message)
+    else:
+        masto = get_mastodon_from_msg(message)
+        if masto:
+            masto.status_unfavourite(payload)
+        else:
+            replies.add(text="❌ You are not logged in", quote=message)
+
+
 def boost_cmd(payload: str, message: Message, replies: Replies) -> None:
     """Boost the toot with the given id."""
     if not payload:
@@ -408,6 +421,18 @@ def boost_cmd(payload: str, message: Message, replies: Replies) -> None:
             replies.add(text="❌ You are not logged in", quote=message)
 
 
+def unboost_cmd(payload: str, message: Message, replies: Replies) -> None:
+    """Unboost the toot with the given id."""
+    if not payload:
+        replies.add(text="❌ Wrong usage", quote=message)
+    else:
+        masto = get_mastodon_from_msg(message)
+        if masto:
+            masto.status_unreblog(payload)
+        else:
+            replies.add(text="❌ You are not logged in", quote=message)
+
+
 def open_cmd(bot: DeltaBot, payload: str, message: Message, replies: Replies) -> None:
     """Open the thread of the toot with the given id."""
     if not payload:
@@ -416,12 +441,13 @@ def open_cmd(bot: DeltaBot, payload: str, message: Message, replies: Replies) ->
         masto = get_mastodon_from_msg(message)
         if masto:
             toots = masto.status_context(payload)["ancestors"]
-            replies.add(
-                text=TOOT_SEP.join(toots2text(bot, toots[-3:]))
-                if toots
-                else "❌ Nothing found",
-                quote=message,
-            )
+            if toots:
+                replies.add(
+                    filename=toots2xdc(bot, masto.api_base_url, masto.me(), toots),
+                    quote=message,
+                )
+            else:
+                replies.add(text="❌ Nothing found", quote=message)
         else:
             replies.add(text="❌ You are not logged in", quote=message)
 
@@ -474,34 +500,44 @@ def profile_cmd(
 ) -> None:
     masto = get_mastodon_from_msg(message)
     if masto:
-        text = get_profile(bot, masto, payload)
+        args = get_profile(bot, masto, payload)
     else:
-        text = "❌ You are not logged in"
-    replies.add(text=text, quote=message)
+        args = dict(text="❌ You are not logged in")
+    replies.add(**args, quote=message)
 
 
 def local_cmd(bot: DeltaBot, message: Message, replies: Replies) -> None:
     """Get latest entries from the local timeline."""
     masto = get_mastodon_from_msg(message)
     if masto:
-        text = (
-            TOOT_SEP.join(toots2text(bot, masto.timeline_local())) or "❌ Nothing found"
-        )
+        toots = masto.timeline_local()
+        if toots:
+            replies.add(
+                text="Local Timeline",
+                filename=toots2xdc(bot, masto.api_base_url, masto.me(), toots),
+                quote=message,
+            )
+        else:
+            replies.add(text="❌ Nothing found", quote=message)
     else:
-        text = "❌ You are not logged in"
-    replies.add(text=text, quote=message)
+        replies.add(text="❌ You are not logged in", quote=message)
 
 
 def public_cmd(bot: DeltaBot, message: Message, replies: Replies) -> None:
     """Get latest entries from the public timeline."""
     masto = get_mastodon_from_msg(message)
     if masto:
-        text = (
-            TOOT_SEP.join(toots2text(bot, masto.timeline_public())) or "❌ Nothing found"
-        )
+        toots = masto.timeline_public()
+        if toots:
+            replies.add(
+                text="Public Timeline",
+                filename=toots2xdc(bot, masto.api_base_url, masto.me(), toots),
+                quote=message,
+            )
+        else:
+            replies.add(text="❌ Nothing found", quote=message)
     else:
-        text = "❌ You are not logged in"
-    replies.add(text=text, quote=message)
+        replies.add(text="❌ You are not logged in", quote=message)
 
 
 def tag_cmd(bot: DeltaBot, payload: str, message: Message, replies: Replies) -> None:
@@ -512,13 +548,17 @@ def tag_cmd(bot: DeltaBot, payload: str, message: Message, replies: Replies) -> 
     tag = payload.lstrip("#")
     masto = get_mastodon_from_msg(message)
     if masto:
-        text = (
-            TOOT_SEP.join(toots2text(bot, masto.timeline_hashtag(tag)))
-            or "❌ Nothing found"
-        )
+        toots = masto.timeline_hashtag(tag)
+        if toots:
+            replies.add(
+                text=f"#{tag}",
+                filename=toots2xdc(bot, masto.api_base_url, masto.me(), toots),
+                quote=message,
+            )
+        else:
+            replies.add(text="❌ Nothing found", quote=message)
     else:
-        text = "❌ You are not logged in"
-    replies.add(text=text, quote=message)
+        replies.add(text="❌ You are not logged in", quote=message)
 
 
 def search_cmd(bot: DeltaBot, payload: str, message: Message, replies: Replies) -> None:

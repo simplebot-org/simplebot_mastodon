@@ -1,0 +1,11 @@
+{
+    "private": true,
+    "scripts": {
+        "dev": "vite --open",
+        "build": "vite build",
+        "preview": "vite preview"
+    },
+    "devDependencies": {
+        "vite": "^2.9.5"
+    }
+}
