@@ -458,7 +458,7 @@ def _check_home(
     if toots:
         replies = Replies(bot, bot.logger)
         replies.add(
-            text=f"{len(toots)} new toots(s)",
+            text=f"{len(toots)} new toot(s)",
             filename=toots2xdc(bot, masto.api_base_url, me, toots),
             chat=bot.get_chat(home_chat),
         )
