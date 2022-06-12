@@ -23,6 +23,7 @@ if __name__ == "__main__":
     MODULE_NAME = "simplebot_mastodon"
     DESC = "Mastodon/DeltaChat bridge."
     KEYWORDS = "simplebot plugin deltachat mastodon bridge"
+    URL = "https://github.com/simplebot-org/simplebot_mastodon"
 
     with open("README.rst", encoding="utf-8") as fh:
         long_description = fh.read()
@@ -39,6 +40,9 @@ if __name__ == "__main__":
         description=DESC,
         long_description=long_description,
         long_description_content_type="text/x-rst",
+        author="adbenitez",
+        author_email="adbenitez@nauta.cu",
+        url=URL,
         keywords=KEYWORDS,
         license="MPL",
         classifiers=[
