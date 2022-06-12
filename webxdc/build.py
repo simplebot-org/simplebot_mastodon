@@ -2,9 +2,8 @@ import os
 import shutil
 import subprocess
 
-data_dir = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "simplebot_mastodon", "data")
-)
+os.chdir(os.path.dirname(__file__))
+data_dir = os.path.abspath(os.path.join("..", "simplebot_mastodon", "data"))
 
 if __name__ == "__main__":
     subprocess.check_call(["pnpm", "i"])

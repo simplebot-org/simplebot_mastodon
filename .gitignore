@@ -2,6 +2,7 @@ __pycache__
 .cache
 .mypy_cache
 .pytest_cache
+.pnpm-debug.log*
 build
 dist
 .eggs
@@ -11,6 +12,4 @@ dist
 .#*
 *#
 
-
-simplebot_mastodon/data
 webxdc/node_modules
