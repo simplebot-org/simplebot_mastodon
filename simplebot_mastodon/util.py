@@ -91,11 +91,11 @@ def toots2text(bot: DeltaBot, toots: list, notifications: bool = False) -> Gener
 
         text += f"\n\n[{v2emoji[t.visibility]} {t.created_at.strftime(STRFORMAT)}]\n"
         if not notifications or is_mention:
-            text += f"↩️ /{prefix}reply_{t.id}\n"
-            text += f"⭐ /{prefix}star_{t.id}\n"
+            text += f"↩️ /{prefix}reply_{t.id}\n\n"
+            text += f"⭐ /{prefix}star_{t.id}\n\n"
             if t.visibility in (Visibility.PUBLIC, Visibility.UNLISTED):
-                text += f"🔁 /{prefix}boost_{t.id}\n"
-            text += f"⏫ /{prefix}open_{t.id}\n"
+                text += f"🔁 /{prefix}boost_{t.id}\n\n"
+            text += f"⏫ /{prefix}open_{t.id}\n\n"
 
         yield text
 
