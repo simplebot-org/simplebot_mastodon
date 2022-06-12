@@ -1,5 +1,5 @@
 class TestPlugin:
-    """Online tests"""
+    """Offline tests"""
 
     def test_logout(self, mocker) -> None:
         msg = mocker.get_one_reply("/logout")

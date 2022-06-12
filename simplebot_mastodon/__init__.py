@@ -6,7 +6,6 @@ from typing import List
 
 import simplebot
 from deltachat import Chat, Contact, Message
-from pkg_resources import DistributionNotFound, get_distribution
 from simplebot.bot import DeltaBot, Replies
 
 import mastodon
@@ -29,11 +28,6 @@ from .util import (
     toots2text,
 )
 
-try:
-    __version__ = get_distribution(__name__).version
-except DistributionNotFound:
-    # package is not installed
-    __version__ = "0.0.0.dev0-unknown"
 MASTODON_LOGO = os.path.join(os.path.dirname(__file__), "mastodon-logo.png")
 
 
