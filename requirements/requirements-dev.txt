@@ -1,8 +1,8 @@
 -r requirements.txt
 -r requirements-test.txt
 black==22.3.0
-mypy==0.950
+mypy==0.961
 isort==5.10.1
 pylint==2.13.9
 pylama==8.3.8
-types-requests==2.27.25
+types-requests==2.27.30
