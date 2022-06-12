@@ -10,3 +10,7 @@ dist
 *~
 .#*
 *#
+
+
+simplebot_mastodon/data
+webxdc/node_modules

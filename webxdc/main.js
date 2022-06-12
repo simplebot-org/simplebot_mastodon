@@ -81,7 +81,7 @@ function getIcon(name, attributes) {
         Object.entries(attributes).forEach(entry => {
             element.setAttribute(entry[0], entry[1]);
         });
-    }    
+    }
     return element;
 }
 
