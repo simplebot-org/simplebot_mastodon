@@ -12,9 +12,6 @@ import requests
 from bs4 import BeautifulSoup
 from deltachat import Message
 from html2text import html2text
-from pydub import AudioSegment
-from simplebot.bot import DeltaBot
-
 from mastodon import (
     Mastodon,
     MastodonInternalServerError,
@@ -22,6 +19,8 @@ from mastodon import (
     MastodonServiceUnavailableError,
     MastodonUnauthorizedError,
 )
+from pydub import AudioSegment
+from simplebot.bot import DeltaBot
 
 from .orm import Account, Client, DmChat, session_scope
 
