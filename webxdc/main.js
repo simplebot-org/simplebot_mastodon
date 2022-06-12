@@ -210,7 +210,6 @@ function main(data) {
             "div", {class: "toolbar"}, h(
                 "button", {class: "icon-btn", onclick: "showReplyForm(this)"}, getIcon(
                     "fa-reply", {class: "btn-svg"})),
-            
         );
         if (toot.visibility === "public" || toot.visibility === "unlisted") {
             let attrs = {
@@ -224,7 +223,7 @@ function main(data) {
             let icon = toot.visibility === "direct"? "fa-envelope" : "fa-lock";
             toolbar.appendChild(h("button", attrs, getIcon(icon, {class: "btn-svg"})));
         }
-        
+
         toolbar.append(
             h("button", {class: "icon-btn", onclick: toot.favourited? "unstar(this)" : "star(this)", style: toot.favourited? "fill: #2b90d9" : ""},
               getIcon("fa-star", {class: "btn-svg"})),
