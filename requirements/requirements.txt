@@ -4,4 +4,4 @@ html2text==2020.1.16
 beautifulsoup4==4.11.1
 requests==2.27.1
 pydub==0.25.1
-SQLAlchemy==1.4.36
+SQLAlchemy==1.4.37
