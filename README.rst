@@ -1,5 +1,5 @@
-Mastodon/DeltaChat Bridge
-=========================
+Mastodon Bridge
+===============
 
 .. image:: https://img.shields.io/pypi/v/simplebot_mastodon.svg
    :target: https://pypi.org/project/simplebot_mastodon
@@ -19,7 +19,7 @@ Mastodon/DeltaChat Bridge
 .. image:: https://img.shields.io/badge/code%20style-black-000000.svg
    :target: https://github.com/psf/black
 
-A Mastodon/DeltaChat bridge plugin for `SimpleBot`_.
+A Mastodon <-> DeltaChat bridge plugin for `SimpleBot`_.
 
 If this plugin has collisions with commands from other plugins in your bot, you can set a command prefix like ``/masto_`` for all commands::
 
