@@ -6,7 +6,7 @@ import re
 import time
 from enum import Enum
 from tempfile import NamedTemporaryFile
-from typing import Any, Generator, List, Optional
+from typing import Any, Generator, Iterable, List, Optional
 
 import requests
 from bs4 import BeautifulSoup
@@ -45,9 +45,11 @@ v2emoji = {
 }
 
 
-def toots2text(bot: DeltaBot, toots: list, notifications: bool = False) -> Generator:
+def toots2text(
+    bot: DeltaBot, toots: Iterable, notifications: bool = False
+) -> Generator:
     prefix = getdefault(bot, "cmd_prefix", "")
-    for t in reversed(toots):
+    for t in toots:
         if notifications:
             is_mention = False
             timestamp = t.created_at.strftime(STRFORMAT)
@@ -194,7 +196,7 @@ def get_profile(bot: DeltaBot, masto: Mastodon, username: str = None) -> str:
         text += f"\n/{prefix}dm_{user.id}"
     text += TOOT_SEP
     toots = masto.account_statuses(user, limit=10)
-    text += TOOT_SEP.join(toots2text(bot, toots))
+    text += TOOT_SEP.join(toots2text(bot, reversed(toots)))
     return text
 
 
@@ -448,7 +450,7 @@ def _check_notifications(
     )
     if notifications:
         bot.get_chat(notif_chat).send_text(
-            TOOT_SEP.join(toots2text(bot, notifications, True))
+            TOOT_SEP.join(toots2text(bot, reversed(notifications), True))
         )
 
 
@@ -475,4 +477,6 @@ def _check_home(
                 toots.append(t)
     bot.logger.debug("Home: %s new entries (last id: %s)", len(toots), last_home)
     if toots:
-        bot.get_chat(home_chat).send_text(TOOT_SEP.join(toots2text(bot, toots)))
+        bot.get_chat(home_chat).send_text(
+            TOOT_SEP.join(toots2text(bot, reversed(toots)))
+        )

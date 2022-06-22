@@ -476,7 +476,8 @@ def local_cmd(bot: DeltaBot, message: Message, replies: Replies) -> None:
     masto = get_mastodon_from_msg(message)
     if masto:
         text = (
-            TOOT_SEP.join(toots2text(bot, masto.timeline_local())) or "❌ Nothing found"
+            TOOT_SEP.join(toots2text(bot, reversed(masto.timeline_local())))
+            or "❌ Nothing found"
         )
     else:
         text = "❌ You are not logged in"
@@ -488,7 +489,8 @@ def public_cmd(bot: DeltaBot, message: Message, replies: Replies) -> None:
     masto = get_mastodon_from_msg(message)
     if masto:
         text = (
-            TOOT_SEP.join(toots2text(bot, masto.timeline_public())) or "❌ Nothing found"
+            TOOT_SEP.join(toots2text(bot, reversed(masto.timeline_public())))
+            or "❌ Nothing found"
         )
     else:
         text = "❌ You are not logged in"
@@ -504,7 +506,7 @@ def tag_cmd(bot: DeltaBot, payload: str, message: Message, replies: Replies) -> 
     masto = get_mastodon_from_msg(message)
     if masto:
         text = (
-            TOOT_SEP.join(toots2text(bot, masto.timeline_hashtag(tag)))
+            TOOT_SEP.join(toots2text(bot, reversed(masto.timeline_hashtag(tag))))
             or "❌ Nothing found"
         )
     else:
