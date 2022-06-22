@@ -204,6 +204,7 @@ def listen_to_mastodon(bot: DeltaBot) -> None:
     while True:
         bot.logger.debug("Checking Mastodon")
         instances: dict = {}
+        acc_count = 0
         with session_scope() as session:
             bot.logger.debug("Accounts to check: %s", session.query(Account).count())
             for acc in session.query(Account):
@@ -217,6 +218,7 @@ def listen_to_mastodon(bot: DeltaBot) -> None:
                         acc.last_notif,
                     )
                 )
+                acc_count += 1
         while instances:
             for key in list(instances.keys()):
                 if not instances[key]:
@@ -262,7 +264,9 @@ def listen_to_mastodon(bot: DeltaBot) -> None:
                     )
             time.sleep(2)
         delay = int(getdefault(bot, "delay"))
-        bot.logger.info(f"Done checking Mastodon, sleeping for {delay} seconds...")
+        bot.logger.info(
+            f"Done checking {acc_count} Mastodon accounts, sleeping for {delay} seconds..."
+        )
         time.sleep(delay)
 
 
