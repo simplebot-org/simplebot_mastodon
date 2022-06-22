@@ -381,7 +381,9 @@ def _handle_dms(dms: list, bot: DeltaBot, addr: str) -> None:
             p.replace_with(p.get_text() + "\n\n")
         text += soup.get_text()
         text += f"\n\n[{v2emoji[dm.visibility]} {dm.created_at.strftime(STRFORMAT)}]\n"
-        text += f"⭐ /{prefix}star_{dm.id}\n"
+        text += f"↩️ /{prefix}reply_{dm.id}\n\n"
+        text += f"⭐ /{prefix}star_{dm.id}\n\n"
+        text += f"⏫ /{prefix}open_{dm.id}\n\n"
 
         chat_id = 0
         with session_scope() as session:
