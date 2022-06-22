@@ -403,9 +403,12 @@ def open_cmd(bot: DeltaBot, payload: str, message: Message, replies: Replies) ->
     else:
         masto = get_mastodon_from_msg(message)
         if masto:
-            toots = masto.status_context(payload)["ancestors"]
+            context = masto.status_context(payload)
+            toots = (
+                context["ancestors"] + [masto.status(payload)] + context["descendants"]
+            )
             replies.add(
-                text=TOOT_SEP.join(toots2text(bot, toots[-3:]))
+                text=TOOT_SEP.join(toots2text(bot, toots))
                 if toots
                 else "❌ Nothing found",
                 quote=message,

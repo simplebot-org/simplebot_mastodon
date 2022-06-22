@@ -316,9 +316,21 @@ def get_mastodon(api_url: str, token: str = None) -> Mastodon:
 
 def get_mastodon_from_msg(message: Message) -> Optional[Mastodon]:
     addr = message.get_sender_contact().addr
+    multiuser = message.chat.is_multiuser()
     api_url, token = "", ""
     with session_scope() as session:
-        acc = session.query(Account).filter_by(addr=addr).first()
+        acc = None
+        if multiuser:
+            acc = (
+                session.query(Account)
+                .filter(
+                    (Account.home == message.chat.id)
+                    | (Account.notifications == message.chat.id)
+                )
+                .first()
+            )
+        if not acc:
+            acc = session.query(Account).filter_by(addr=addr).first()
         if acc:
             api_url, token = acc.url, acc.token
 
