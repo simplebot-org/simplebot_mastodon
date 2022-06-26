@@ -1,5 +1,14 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- don't notify Mastodon server errors.
+
+### Fixed
+
+- fix settings scope, settings under `simplebot_mastodon/` were not taking effect.
 
 ## [v0.2.0]
 
@@ -15,4 +24,5 @@
 - initial release
 
 
+[Unreleased]: https://github.com/adbenitez/deltachat-cursed/compare/v0.2.0...HEAD
 [v0.2.0]: https://github.com/adbenitez/deltachat-cursed/compare/v0.1.0...v0.2.0
