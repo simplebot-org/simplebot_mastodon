@@ -12,7 +12,12 @@ import requests
 from bs4 import BeautifulSoup
 from deltachat import Message
 from html2text import html2text
-from mastodon import Mastodon, MastodonNetworkError, MastodonUnauthorizedError
+from mastodon import (
+    Mastodon,
+    MastodonNetworkError,
+    MastodonServerError,
+    MastodonUnauthorizedError,
+)
 from pydub import AudioSegment
 from simplebot.bot import DeltaBot
 
