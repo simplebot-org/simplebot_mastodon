@@ -256,7 +256,7 @@ def listen_to_mastodon(bot: DeltaBot) -> None:
             time.sleep(2)
         delay = int(getdefault(bot, "delay"))
         bot.logger.info(
-            f"Done checking {acc_count} Mastodon accounts, sleeping for {delay} seconds..."
+            f"Done checking {acc_count} accounts, sleeping for {delay} seconds..."
         )
         time.sleep(delay)
 
