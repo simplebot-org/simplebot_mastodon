@@ -162,7 +162,7 @@ def filter_messages(bot: DeltaBot, message: Message, replies: Replies) -> None:
             _login(addr, user, m, bot, replies)
             with session_scope() as session:
                 session.delete(session.query(OAuth).filter_by(addr=addr).first())
-        except Exception:
+        except Exception:  # noqa
             text = "❌ Authentication failed, generate another authorization code and send it here"
             replies.add(text=text, quote=message)
         return
