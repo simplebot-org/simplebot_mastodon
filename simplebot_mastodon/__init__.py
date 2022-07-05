@@ -260,7 +260,7 @@ def login_cmd(bot: DeltaBot, payload: str, message: Message, replies: Replies) -
                 auth.user = user
         auth_url = m.auth_request_url()
         text = (
-            f"To grant access to your account, open this URL:\n{auth_url}\n\n"
+            f"To grant access to your account, open this URL:\n\n{auth_url}\n\n"
             "You will get an authorization code, copy it and send it here"
         )
         replies.add(text=text, quote=message)
