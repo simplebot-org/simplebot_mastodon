@@ -299,7 +299,11 @@ def get_client(session, api_url) -> tuple:
 
     try:
         client_id, client_secret = Mastodon.create_app(
-            "DeltaChat Bridge", api_base_url=api_url
+            client_name="DeltaChat Bridge",
+            website="https://github.com/simplebot-org/simplebot_mastodon",
+            redirect_uris="urn:ietf:wg:oauth:2.0:oob",
+            api_base_url=api_url,
+            session=web,
         )
     except Exception:  # noqa
         client_id, client_secret = None, None
@@ -307,12 +311,13 @@ def get_client(session, api_url) -> tuple:
     return client_id, client_secret
 
 
-def get_mastodon(api_url: str, token: str = None) -> Mastodon:
+def get_mastodon(api_url: str, token: str = None, **kwargs) -> Mastodon:
     return Mastodon(
         access_token=token,
         api_base_url=api_url,
         ratelimit_method="throw",
         session=web,
+        **kwargs,
     )
 
 

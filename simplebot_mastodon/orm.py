@@ -38,6 +38,14 @@ class DmChat(Base):
     acc_addr = Column(String(1000), ForeignKey("account.addr"), nullable=False)
 
 
+class OAuth(Base):
+    addr = Column(String(1000), primary_key=True)
+    url = Column(String(1000), nullable=False)
+    user = Column(String(1000))
+    client_id = Column(String(1000), nullable=False)
+    client_secret = Column(String(1000), nullable=False)
+
+
 class Client(Base):
     url = Column(String(1000), primary_key=True)
     id = Column(String(1000))

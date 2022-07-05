@@ -2,9 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- OAuth2 support.
+
 ### Changed
 
 - don't notify Mastodon server errors.
+- tweaked informational message in the Home and Notifications chats when they are created.
 
 ### Fixed
 

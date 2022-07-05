@@ -9,7 +9,7 @@ import simplebot
 from deltachat import Chat, Contact, Message
 from simplebot.bot import DeltaBot, Replies
 
-from .orm import Account, DmChat, init, session_scope
+from .orm import Account, DmChat, OAuth, init, session_scope
 from .util import (
     TOOT_SEP,
     Visibility,
@@ -46,7 +46,7 @@ def deltabot_init(bot: DeltaBot) -> None:
     bot.commands.register(func=local_cmd, name=f"/{pref}local")
     bot.commands.register(func=public_cmd, name=f"/{pref}public")
 
-    desc = f"Login on Mastodon.\n\nExample:\n/{pref}login mastodon.social me@example.com myPassw0rd"
+    desc = f"Login on Mastodon.\n\nExample:\n/{pref}login mastodon.social\n\nTo login without OAuth:\n/{pref}login mastodon.social me@example.com myPassw0rd"
     bot.commands.register(func=login_cmd, name=f"/{pref}login", help=desc)
 
     desc = f"Update your Mastodon biography.\n\nExample:\n/{pref}bio I love Delta Chat"
@@ -132,7 +132,7 @@ def deltabot_member_removed(
 
 
 @simplebot.filter
-def filter_messages(message: Message, replies: Replies) -> None:
+def filter_messages(bot: DeltaBot, message: Message, replies: Replies) -> None:
     """Once you log in with your Mastodon credentials, two chats will be created for you:
 
     • The Home chat is where you will receive your Home timeline and any message you send in that chat will be published on Mastodon.
@@ -141,10 +141,30 @@ def filter_messages(message: Message, replies: Replies) -> None:
     When a Mastodon user writes a private/direct message to you, a chat will be created for your private conversation with that user.
     """
     if not message.chat.is_group():
-        replies.add(
-            text="❌ To publish messages you must send them in your Home chat.",
-            quote=message,
-        )
+        addr = message.get_sender_contact().addr
+        with session_scope() as session:
+            auth = session.query(OAuth).filter_by(addr=addr).first()
+            if not auth:
+                replies.add(
+                    text="❌ To publish messages you must send them in your Home chat.",
+                    quote=message,
+                )
+                return
+            url, user, client_id, client_secret = (
+                auth.url,
+                auth.user,
+                auth.client_id,
+                auth.client_secret,
+            )
+        m = get_mastodon(url, client_id=client_id, client_secret=client_secret)
+        try:
+            m.log_in(code=message.text.strip())
+            _login(addr, user, m, bot, replies)
+            with session_scope() as session:
+                session.delete(session.query(OAuth).filter_by(addr=addr).first())
+        except Exception:
+            text = "❌ Authentication failed, generate another authorization code and send it here"
+            replies.add(text=text, quote=message)
         return
 
     api_url: str = ""
@@ -179,10 +199,13 @@ def filter_messages(message: Message, replies: Replies) -> None:
 
 def login_cmd(bot: DeltaBot, payload: str, message: Message, replies: Replies) -> None:
     args = payload.split(maxsplit=2)
-    if len(args) != 3:
-        replies.add(text="❌ Wrong usage", quote=message)
-        return
-    api_url, email, passwd = args
+    if len(args) == 1:
+        api_url, email, passwd = args[0], None, None
+    else:
+        if len(args) != 3:
+            replies.add(text="❌ Wrong usage", quote=message)
+            return
+        api_url, email, passwd = args
     api_url = normalize_url(api_url)
     addr = message.get_sender_contact().addr
 
@@ -206,52 +229,90 @@ def login_cmd(bot: DeltaBot, payload: str, message: Message, replies: Replies) -
 
         client_id, client_secret = get_client(session, api_url)
 
-    m = get_mastodon(api_url)
-    m.client_id, m.client_secret = client_id, client_secret
-    m.log_in(email, passwd)
-    uname = m.me().acct.lower()
+    m = get_mastodon(api_url, client_id=client_id, client_secret=client_secret)
+
+    if email:
+        m.log_in(email, passwd)
+        _login(addr, user, m, bot, replies)
+    else:
+        if client_id is None:
+            replies.add(
+                text="❌ Server doesn't seem to support OAuth.",
+                quote=message,
+            )
+            return
+        with session_scope() as session:
+            auth = session.query(OAuth).filter_by(addr=addr).first()
+            if not auth:
+                session.add(
+                    OAuth(
+                        addr=addr,
+                        url=api_url,
+                        user=user,
+                        client_id=client_id,
+                        client_secret=client_secret,
+                    )
+                )
+            else:
+                auth.url = api_url
+                auth.client_id = client_id
+                auth.client_secret = client_secret
+                auth.user = user
+        auth_url = m.auth_request_url()
+        text = (
+            f"To grant access to your account, open this URL:\n{auth_url}\n\n"
+            "You will get an authorization code, copy it and send it here"
+        )
+        replies.add(text=text, quote=message)
+
+
+def _login(
+    addr: str, user: str, masto: mastodon.Mastodon, bot: DeltaBot, replies: Replies
+) -> None:
+    uname = masto.me().acct.lower()
 
     if user:
         if user == uname:
             with session_scope() as session:
                 acc = session.query(Account).filter_by(addr=addr).first()
-                acc.token = m.access_token
+                acc.token = masto.access_token
                 replies.add(text="✔️ You refreshed your credentials.")
         else:
             replies.add(text="❌ You are already logged in.")
         return
 
-    n = m.notifications(limit=1)
+    n = masto.notifications(limit=1)
     last_notif = n[0].id if n else None
-    n = m.timeline_home(limit=1)
+    n = masto.timeline_home(limit=1)
     last_home = n[0].id if n else None
 
+    api_url = masto.api_base_url
     url = api_url.split("://", maxsplit=1)[-1]
     hgroup = bot.create_group(f"Home ({url})", [addr])
     ngroup = bot.create_group(f"Notifications ({url})", [addr])
 
-    acc = Account(
-        addr=addr,
-        user=uname,
-        url=api_url,
-        token=m.access_token,
-        home=hgroup.id,
-        notifications=ngroup.id,
-        last_home=last_home,
-        last_notif=last_notif,
-    )
-
     with session_scope() as session:
-        session.add(acc)
+        session.add(
+            Account(
+                addr=addr,
+                user=uname,
+                url=api_url,
+                token=masto.access_token,
+                home=hgroup.id,
+                notifications=ngroup.id,
+                last_home=last_home,
+                last_notif=last_notif,
+            )
+        )
 
     hgroup.set_profile_image(MASTODON_LOGO)
     replies.add(
-        text=f"ℹ️ Messages sent here will be published in {api_url}", chat=hgroup
+        text=f"ℹ️ Messages sent here will be published in @{uname}@{url}", chat=hgroup
     )
 
     ngroup.set_profile_image(MASTODON_LOGO)
     replies.add(
-        text=f"ℹ️ Here you will receive notifications from {api_url}", chat=ngroup
+        text=f"ℹ️ Here you will receive notifications for @{uname}@{url}", chat=ngroup
     )
 
 
