@@ -140,7 +140,7 @@ def filter_messages(bot: DeltaBot, message: Message, replies: Replies) -> None:
 
     When a Mastodon user writes a private/direct message to you, a chat will be created for your private conversation with that user.
     """
-    if not message.chat.is_group():
+    if not message.chat.is_multiuser():
         addr = message.get_sender_contact().addr
         with session_scope() as session:
             auth = session.query(OAuth).filter_by(addr=addr).first()
