@@ -1,4 +1,4 @@
-simplebot==3.0.0
+simplebot==3.2.0
 Mastodon.py==1.5.1
 html2text==2020.1.16
 beautifulsoup4==4.11.1
