@@ -14,7 +14,7 @@ from .util import (
     TOOT_SEP,
     Visibility,
     account_action,
-    download_image,
+    download_file,
     get_client,
     get_mastodon,
     get_mastodon_from_msg,
@@ -24,7 +24,7 @@ from .util import (
     listen_to_mastodon,
     normalize_url,
     send_toot,
-    toots2text,
+    toots2texts,
 )
 
 MASTODON_LOGO = os.path.join(os.path.dirname(__file__), "mastodon-logo.png")
@@ -406,10 +406,13 @@ def dm_cmd(bot: DeltaBot, payload: str, message: Message, replies: Replies) -> N
             chat = bot.create_group(user.acct, [addr])
             session.add(DmChat(chat_id=chat.id, contact=user.acct, acc_addr=addr))
 
-        path = download_image(bot, user.avatar_static)
         try:
+            path = download_file(bot, user.avatar_static, ".jpg")
             chat.set_profile_image(path)
         except ValueError as err:
+            bot.logger.exception(err)
+            os.remove(path)
+        except Exception as err:
             bot.logger.exception(err)
         replies.add(text=f"ℹ️ Private chat with: {user.acct}", chat=chat)
     else:
@@ -469,7 +472,7 @@ def open_cmd(bot: DeltaBot, payload: str, message: Message, replies: Replies) ->
                 context["ancestors"] + [masto.status(payload)] + context["descendants"]
             )
             replies.add(
-                text=TOOT_SEP.join(toots2text(bot, toots))
+                text=TOOT_SEP.join(toots2texts(bot, toots))
                 if toots
                 else "❌ Nothing found",
                 quote=message,
@@ -537,7 +540,7 @@ def local_cmd(bot: DeltaBot, message: Message, replies: Replies) -> None:
     masto = get_mastodon_from_msg(message)
     if masto:
         text = (
-            TOOT_SEP.join(toots2text(bot, reversed(masto.timeline_local())))
+            TOOT_SEP.join(toots2texts(bot, reversed(masto.timeline_local())))
             or "❌ Nothing found"
         )
     else:
@@ -550,7 +553,7 @@ def public_cmd(bot: DeltaBot, message: Message, replies: Replies) -> None:
     masto = get_mastodon_from_msg(message)
     if masto:
         text = (
-            TOOT_SEP.join(toots2text(bot, reversed(masto.timeline_public())))
+            TOOT_SEP.join(toots2texts(bot, reversed(masto.timeline_public())))
             or "❌ Nothing found"
         )
     else:
@@ -567,7 +570,7 @@ def tag_cmd(bot: DeltaBot, payload: str, message: Message, replies: Replies) -> 
     masto = get_mastodon_from_msg(message)
     if masto:
         text = (
-            TOOT_SEP.join(toots2text(bot, reversed(masto.timeline_hashtag(tag))))
+            TOOT_SEP.join(toots2texts(bot, reversed(masto.timeline_hashtag(tag))))
             or "❌ Nothing found"
         )
     else:

@@ -2,24 +2,26 @@
 
 import functools
 import mimetypes
+import os
 import re
 import time
 from enum import Enum
 from tempfile import NamedTemporaryFile
-from typing import Any, Generator, Iterable, List, Optional
+from typing import Any, Dict, Generator, Iterable, List, Optional
 
 import requests
 from bs4 import BeautifulSoup
 from deltachat import Message
 from html2text import html2text
 from mastodon import (
+    AttribAccessDict,
     Mastodon,
     MastodonNetworkError,
     MastodonServerError,
     MastodonUnauthorizedError,
 )
 from pydub import AudioSegment
-from simplebot.bot import DeltaBot
+from simplebot.bot import DeltaBot, Replies
 
 from .orm import Account, Client, DmChat, session_scope
 
@@ -44,61 +46,97 @@ v2emoji = {
 }
 
 
-def toots2text(
+def toots2texts(
     bot: DeltaBot, toots: Iterable, notifications: bool = False
 ) -> Generator:
     prefix = getdefault(bot, "cmd_prefix", "")
-    for t in toots:
-        if notifications:
-            is_mention = False
-            timestamp = t.created_at.strftime(STRFORMAT)
-            if t.type == "reblog":
-                text = f"🔁 {_get_name(t.account)} boosted your toot. ({timestamp})\n\n"
-            elif t.type == "favourite":
-                text = (
-                    f"⭐ {_get_name(t.account)} favorited your toot. ({timestamp})\n\n"
-                )
-            elif t.type == "follow":
-                yield f"👤 {_get_name(t.account)} followed you. ({timestamp})"
-                continue
-            elif t.type == "mention":
-                is_mention = True
-                text = f"{_get_name(t.account)}:\n\n"
-            else:
-                continue
-            t = t.status
-        elif t.reblog:
-            text = f"{_get_name(t.reblog.account)}:\n🔁 {_get_name(t.account)}\n\n"
-            t = t.reblog
-        else:
-            text = f"{_get_name(t.account)}:\n\n"
+    for toot in toots:
+        reply = toot2reply(prefix, toot, notifications)
+        text = reply.get("text", "")
+        if reply.get("filename"):
+            if not text.startswith("http"):
+                text = "\n" + text
+            text = reply["filename"] + "\n" + text
+        if text:
+            yield text
 
-        media_urls = "\n".join(media.url for media in t.media_attachments)
-        if media_urls:
-            text += media_urls + "\n\n"
 
-        soup = BeautifulSoup(t.content, "html.parser")
-        if t.mentions:
-            accts = {e.url: "@" + e.acct for e in t.mentions}
-            for a in soup("a", class_="u-url"):
-                name = accts.get(a["href"])
-                if name:
-                    a.string = name
-        for br in soup("br"):
-            br.replace_with("\n")
-        for p in soup("p"):
-            p.replace_with(p.get_text() + "\n\n")
-        text += soup.get_text()
+def toots2replies(
+    bot: DeltaBot, toots: Iterable, notifications: bool = False
+) -> Generator:
+    prefix = getdefault(bot, "cmd_prefix", "")
+    for toot in toots:
+        reply = toot2reply(prefix, toot, notifications)
+        if reply.get("filename"):
+            try:
+                reply["filename"] = download_file(bot, reply["filename"])
+            except Exception as ex:
+                bot.logger.exception(ex)
+                text = reply.get("text", "")
+                if not text.startswith("http"):
+                    text = "\n" + text
+                reply["text"] = reply["filename"] + "\n" + text
+        if reply:
+            yield reply
 
-        text += f"\n\n[{v2emoji[t.visibility]} {t.created_at.strftime(STRFORMAT)}]\n"
-        if not notifications or is_mention:
-            text += f"↩️ /{prefix}reply_{t.id}\n\n"
-            text += f"⭐ /{prefix}star_{t.id}\n\n"
-            if t.visibility in (Visibility.PUBLIC, Visibility.UNLISTED):
-                text += f"🔁 /{prefix}boost_{t.id}\n\n"
-            text += f"⏫ /{prefix}open_{t.id}\n\n"
 
-        yield text
+def toot2reply(
+    prefix: str,
+    toot: AttribAccessDict,
+    notification: bool = False,
+    include_sender: bool = True,
+) -> dict:
+    text = ""
+    if notification:
+        is_mention = False
+        timestamp = toot.created_at.strftime(STRFORMAT)
+        if toot.type == "reblog":
+            text = f"🔁 {_get_name(toot.account)} boosted your toot. ({timestamp})\n\n"
+        elif toot.type == "favourite":
+            text = f"⭐ {_get_name(toot.account)} favorited your toot. ({timestamp})\n\n"
+        elif toot.type == "follow":
+            return {"text": f"👤 {_get_name(toot.account)} followed you. ({timestamp})"}
+        elif toot.type == "mention":
+            is_mention = True
+            text = f"{_get_name(toot.account)}:\n\n"
+        else:  # unsupported type
+            return {}
+        toot = toot.status
+    elif toot.reblog:
+        text = f"{_get_name(toot.reblog.account)}:\n🔁 {_get_name(toot.account)}\n\n"
+        toot = toot.reblog
+    elif include_sender:
+        text = f"{_get_name(toot.account)}:\n\n"
+
+    reply = {}
+    if toot.media_attachments:
+        reply["filename"] = toot.media_attachments.pop(0).url
+    if toot.media_attachments:
+        text += "\n".join(media.url for media in toot.media_attachments) + "\n\n"
+
+    soup = BeautifulSoup(toot.content, "html.parser")
+    if toot.mentions:
+        accts = {e.url: "@" + e.acct for e in toot.mentions}
+        for anchor in soup("a", class_="u-url"):
+            name = accts.get(anchor["href"])
+            if name:
+                anchor.string = name
+    for linebreak in soup("br"):
+        linebreak.replace_with("\n")
+    for paragraph in soup("p"):
+        paragraph.replace_with(paragraph.get_text() + "\n\n")
+    text += soup.get_text()
+
+    text += f"\n\n[{v2emoji[toot.visibility]} {toot.created_at.strftime(STRFORMAT)}]\n"
+    if not notification or is_mention:
+        text += f"↩️ /{prefix}reply_{toot.id}\n\n"
+        text += f"⭐ /{prefix}star_{toot.id}\n\n"
+        if toot.visibility in (Visibility.PUBLIC, Visibility.UNLISTED):
+            text += f"🔁 /{prefix}boost_{toot.id}\n\n"
+        text += f"⏫ /{prefix}open_{toot.id}\n\n"
+
+    reply["text"] = text
+    return reply
 
 
 def get_extension(resp: requests.Response) -> str:
@@ -129,10 +167,10 @@ def get_user(m, user_id) -> Any:
     return user
 
 
-def download_image(bot, url) -> str:
-    """Download an image and save the file in the bot's blobs folder."""
+def download_file(bot: DeltaBot, url: str, default_extension="") -> str:
+    """Download a file and save the file in the bot's blobs folder."""
     with web.get(url) as resp:
-        ext = get_extension(resp) or ".jpg"
+        ext = get_extension(resp) or default_extension
         with NamedTemporaryFile(
             dir=bot.account.get_blobdir(), suffix=ext, delete=False
         ) as temp_file:
@@ -196,7 +234,7 @@ def get_profile(bot: DeltaBot, masto: Mastodon, username: str = None) -> str:
         text += f"\n/{prefix}dm_{user.id}"
     text += TOOT_SEP
     toots = masto.account_statuses(user, limit=10)
-    text += TOOT_SEP.join(toots2text(bot, reversed(toots)))
+    text += TOOT_SEP.join(toots2texts(bot, reversed(toots)))
     return text
 
 
@@ -369,55 +407,58 @@ def _get_name(macc) -> str:
 
 
 def _handle_dms(dms: list, bot: DeltaBot, addr: str) -> None:
-    prefix = getdefault(bot, "cmd_prefix", "")
-    for dm in reversed(dms):
-        text = ""
-        media_urls = "\n".join(media.url for media in dm.media_attachments)
-        if media_urls:
-            text += media_urls + "\n\n"
-
-        soup = BeautifulSoup(dm.content, "html.parser")
-        accts = {e.url: "@" + e.acct for e in dm.mentions}
-        for a in soup("a", class_="u-url"):
-            name = accts.get(a["href"])
-            if name:
-                a.string = name
-        for br in soup("br"):
-            br.replace_with("\n")
-        for p in soup("p"):
-            p.replace_with(p.get_text() + "\n\n")
-        text += soup.get_text()
-        text += f"\n\n[{v2emoji[dm.visibility]} {dm.created_at.strftime(STRFORMAT)}]\n"
-        text += f"↩️ /{prefix}reply_{dm.id}\n\n"
-        text += f"⭐ /{prefix}star_{dm.id}\n\n"
-        text += f"⏫ /{prefix}open_{dm.id}\n\n"
-
-        chat_id = 0
+    def _get_chat_id(acct) -> int:
         with session_scope() as session:
             dmchat = (
-                session.query(DmChat)
-                .filter_by(acc_addr=addr, contact=dm.account.acct)
-                .first()
+                session.query(DmChat).filter_by(acc_addr=addr, contact=acct).first()
             )
             if dmchat:
                 chat_id = dmchat.chat_id
+            else:
+                chat_id = 0
+        return chat_id
+
+    prefix = getdefault(bot, "cmd_prefix", "")
+    chats: Dict[str, int] = {}
+    for dm in reversed(dms):
+        reply = toot2reply(prefix, dm, include_sender=False)
+        if reply.get("filename"):
+            try:
+                reply["filename"] = download_file(bot, reply["filename"])
+            except Exception as ex:
+                bot.logger.exception(ex)
+                text = reply.get("text", "")
+                if not text.startswith("http"):
+                    text = "\n" + text
+                reply["text"] = reply["filename"] + "\n" + text
+        if not reply:
+            continue
+
+        acct = dm.account.acct
+        chat_id = chats.get(acct, 0)
+        if not chat_id:
+            chat_id = chats[acct] = _get_chat_id(acct)
 
         if chat_id:
-            bot.get_chat(chat_id).send_text(text)
+            chat = bot.get_chat(chat_id)
         else:
-            chat = bot.create_group(dm.account.acct, [addr])
+            chat = bot.create_group(acct, [addr])
+            chats[acct] = chat.id
             with session_scope() as session:
-                session.add(
-                    DmChat(chat_id=chat.id, contact=dm.account.acct, acc_addr=addr)
-                )
+                session.add(DmChat(chat_id=chat.id, contact=acct, acc_addr=addr))
 
-            path = download_image(bot, dm.account.avatar_static)
             try:
+                path = download_file(bot, dm.account.avatar_static, ".jpg")
                 chat.set_profile_image(path)
             except ValueError as err:
                 bot.logger.exception(err)
+                os.remove(path)
+            except Exception as err:
+                bot.logger.exception(err)
 
-            chat.send_text(text)
+        replies = Replies(bot, bot.logger)
+        replies.add(**reply, chat=chat)
+        replies.send_reply_messages()
 
 
 def _check_notifications(
@@ -455,7 +496,7 @@ def _check_notifications(
     )
     if notifications:
         bot.get_chat(notif_chat).send_text(
-            TOOT_SEP.join(toots2text(bot, reversed(notifications), True))
+            TOOT_SEP.join(toots2texts(bot, reversed(notifications), True))
         )
 
 
@@ -482,6 +523,8 @@ def _check_home(
                 toots.append(t)
     bot.logger.debug("Home: %s new entries (last id: %s)", len(toots), last_home)
     if toots:
-        bot.get_chat(home_chat).send_text(
-            TOOT_SEP.join(toots2text(bot, reversed(toots)))
-        )
+        chat = bot.get_chat(home_chat)
+        for reply in toots2replies(bot, reversed(toots)):
+            replies = Replies(bot, bot.logger)
+            replies.add(**reply, chat=chat)
+            replies.send_reply_messages()
