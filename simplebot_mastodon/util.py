@@ -57,6 +57,9 @@ def toots2texts(
             if not text.startswith("http"):
                 text = "\n" + text
             text = reply["filename"] + "\n" + text
+        sender = reply.get("sender", "")
+        if sender:
+            text = f"{sender}:\n{text}"
         if text:
             yield text
 
@@ -80,13 +83,9 @@ def toots2replies(
             yield reply
 
 
-def toot2reply(
-    prefix: str,
-    toot: AttribAccessDict,
-    notification: bool = False,
-    include_sender: bool = True,
-) -> dict:
+def toot2reply(prefix: str, toot: AttribAccessDict, notification: bool = False) -> dict:
     text = ""
+    reply = {}
     if notification:
         is_mention = False
         timestamp = toot.created_at.strftime(STRFORMAT)
@@ -98,17 +97,17 @@ def toot2reply(
             return {"text": f"👤 {_get_name(toot.account)} followed you. ({timestamp})"}
         elif toot.type == "mention":
             is_mention = True
-            text = f"{_get_name(toot.account)}:\n\n"
+            reply["sender"] = _get_name(toot.account)
         else:  # unsupported type
             return {}
         toot = toot.status
     elif toot.reblog:
-        text = f"{_get_name(toot.reblog.account)}:\n🔁 {_get_name(toot.account)}\n\n"
+        reply["sender"] = _get_name(toot.reblog.account)
+        text += f"🔁 {_get_name(toot.account)}\n\n"
         toot = toot.reblog
-    elif include_sender:
-        text = f"{_get_name(toot.account)}:\n\n"
+    else:
+        reply["sender"] = _get_name(toot.account)
 
-    reply = {}
     if toot.media_attachments:
         reply["filename"] = toot.media_attachments.pop(0).url
     if toot.media_attachments:
@@ -129,11 +128,12 @@ def toot2reply(
 
     text += f"\n\n[{v2emoji[toot.visibility]} {toot.created_at.strftime(STRFORMAT)}]\n"
     if not notification or is_mention:
-        text += f"↩️ /{prefix}reply_{toot.id}\n\n"
-        text += f"⭐ /{prefix}star_{toot.id}\n\n"
+        text += f"↩️ /{prefix}reply_{toot.id}\n"
+        text += f"⭐ /{prefix}star_{toot.id}\n"
         if toot.visibility in (Visibility.PUBLIC, Visibility.UNLISTED):
-            text += f"🔁 /{prefix}boost_{toot.id}\n\n"
-        text += f"⏫ /{prefix}open_{toot.id}\n\n"
+            text += f"🔁 /{prefix}boost_{toot.id}\n"
+        text += f"⏫ /{prefix}open_{toot.id}\n"
+        text += f"⏫ /{prefix}profile_{toot.account.id}\n"
 
     reply["text"] = text
     return reply
@@ -421,7 +421,7 @@ def _handle_dms(dms: list, bot: DeltaBot, addr: str) -> None:
     prefix = getdefault(bot, "cmd_prefix", "")
     chats: Dict[str, int] = {}
     for dm in reversed(dms):
-        reply = toot2reply(prefix, dm, include_sender=False)
+        reply = toot2reply(prefix, dm)
         if reply.get("filename"):
             try:
                 reply["filename"] = download_file(bot, reply["filename"])
