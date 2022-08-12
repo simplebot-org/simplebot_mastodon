@@ -133,7 +133,7 @@ def toot2reply(prefix: str, toot: AttribAccessDict, notification: bool = False) 
         if toot.visibility in (Visibility.PUBLIC, Visibility.UNLISTED):
             text += f"🔁 /{prefix}boost_{toot.id}\n"
         text += f"⏫ /{prefix}open_{toot.id}\n"
-        text += f"⏫ /{prefix}profile_{toot.account.id}\n"
+        text += f"👤 /{prefix}profile_{toot.account.id}\n"
 
     reply["text"] = text
     return reply
