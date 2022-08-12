@@ -108,7 +108,7 @@ def toot2reply(prefix: str, toot: AttribAccessDict, notification: bool = False) 
     else:
         reply["sender"] = _get_name(toot.account)
 
-    if toot.media_attachments:
+    if toot.media_attachments and (not notification or is_mention):
         reply["filename"] = toot.media_attachments.pop(0).url
     if toot.media_attachments:
         text += "\n".join(media.url for media in toot.media_attachments) + "\n\n"
