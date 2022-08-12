@@ -420,6 +420,7 @@ def _handle_dms(dms: list, bot: DeltaBot, addr: str) -> None:
 
     prefix = getdefault(bot, "cmd_prefix", "")
     chats: Dict[str, int] = {}
+    replies = Replies(bot, bot.logger)
     for dm in reversed(dms):
         reply = toot2reply(prefix, dm)
         if reply.get("filename"):
@@ -456,7 +457,6 @@ def _handle_dms(dms: list, bot: DeltaBot, addr: str) -> None:
             except Exception as err:
                 bot.logger.exception(err)
 
-        replies = Replies(bot, bot.logger)
         replies.add(**reply, chat=chat)
         replies.send_reply_messages()
 
@@ -495,9 +495,11 @@ def _check_notifications(
         last_notif,
     )
     if notifications:
-        bot.get_chat(notif_chat).send_text(
-            TOOT_SEP.join(toots2texts(bot, reversed(notifications), True))
-        )
+        chat = bot.get_chat(notif_chat)
+        replies = Replies(bot, bot.logger)
+        for reply in toots2replies(bot, reversed(notifications), True):
+            replies.add(**reply, chat=chat)
+            replies.send_reply_messages()
 
 
 def _check_home(
@@ -524,7 +526,7 @@ def _check_home(
     bot.logger.debug("Home: %s new entries (last id: %s)", len(toots), last_home)
     if toots:
         chat = bot.get_chat(home_chat)
+        replies = Replies(bot, bot.logger)
         for reply in toots2replies(bot, reversed(toots)):
-            replies = Replies(bot, bot.logger)
             replies.add(**reply, chat=chat)
             replies.send_reply_messages()
