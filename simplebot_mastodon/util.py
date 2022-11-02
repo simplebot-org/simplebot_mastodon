@@ -11,7 +11,7 @@ from typing import Any, Dict, Generator, Iterable, List, Optional
 
 import requests
 from bs4 import BeautifulSoup
-from deltachat import Message
+from deltachat import Chat, Message
 from html2text import html2text
 from mastodon import (
     AttribAccessDict,
@@ -360,26 +360,36 @@ def get_mastodon(api_url: str, token: str = None, **kwargs) -> Mastodon:
 
 
 def get_mastodon_from_msg(message: Message) -> Optional[Mastodon]:
-    addr = message.get_sender_contact().addr
-    multiuser = message.chat.is_multiuser()
     api_url, token = "", ""
     with session_scope() as session:
-        acc = None
-        if multiuser:
-            acc = (
-                session.query(Account)
-                .filter(
-                    (Account.home == message.chat.id)
-                    | (Account.notifications == message.chat.id)
-                )
-                .first()
-            )
-        if not acc:
-            acc = session.query(Account).filter_by(addr=addr).first()
+        acc = get_account_from_msg(message, session)
         if acc:
             api_url, token = acc.url, acc.token
-
     return get_mastodon(api_url, token) if api_url else None
+
+
+def get_account_from_msg(message: Message, session) -> Optional[Account]:
+    acc = get_account_from_chat(message.chat, session)
+    if not acc:
+        addr = message.get_sender_contact().addr
+        acc = session.query(Account).filter_by(addr=addr).first()
+    return acc
+
+
+def get_account_from_chat(chat: Chat, session) -> Optional[Account]:
+    if chat.is_multiuser():
+        acc = (
+            session.query(Account)
+            .filter((Account.home == chat.id) | (Account.notifications == chat.id))
+            .first()
+        )
+        if not acc:
+            dmchat = session.query(DmChat).filter_by(chat_id=chat.id).first()
+            if dmchat:
+                acc = dmchat.account
+    else:
+        acc = None
+    return acc
 
 
 def account_action(action: str, payload: str, message: Message) -> str:
@@ -406,7 +416,7 @@ def _get_name(macc) -> str:
     return isbot + macc.acct
 
 
-def _handle_dms(dms: list, bot: DeltaBot, addr: str) -> None:
+def _handle_dms(dms: list, bot: DeltaBot, addr: str, notif_chat: int) -> None:
     def _get_chat_id(acct) -> int:
         with session_scope() as session:
             dmchat = (
@@ -443,7 +453,7 @@ def _handle_dms(dms: list, bot: DeltaBot, addr: str) -> None:
         if chat_id:
             chat = bot.get_chat(chat_id)
         else:
-            chat = bot.create_group(acct, [addr])
+            chat = bot.create_group(acct, bot.get_chat(notif_chat).get_contacts())
             chats[acct] = chat.id
             with session_scope() as session:
                 session.add(DmChat(chat_id=chat.id, contact=acct, acc_addr=addr))
@@ -487,7 +497,7 @@ def _check_notifications(
                 notifications.append(n)
 
     if dms:
-        _handle_dms(dms, bot, addr)
+        _handle_dms(dms, bot, addr, notif_chat)
 
     bot.logger.debug(
         "Notifications: %s new entries (last id: %s)",

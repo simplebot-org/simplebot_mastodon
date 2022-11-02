@@ -15,6 +15,7 @@ from .util import (
     Visibility,
     account_action,
     download_file,
+    get_account_from_msg,
     get_client,
     get_mastodon,
     get_mastodon_from_msg,
@@ -384,7 +385,6 @@ def dm_cmd(bot: DeltaBot, payload: str, message: Message, replies: Replies) -> N
         replies.add(text="❌ Wrong usage", quote=message)
         return
 
-    addr = message.get_sender_contact().addr
     masto = get_mastodon_from_msg(message)
     if masto:
         username = payload.lstrip("@").lower()
@@ -394,17 +394,21 @@ def dm_cmd(bot: DeltaBot, payload: str, message: Message, replies: Replies) -> N
             return
 
         with session_scope() as session:
+            acc = get_account_from_msg(message, session)
+            assert acc
             dmchat = (
                 session.query(DmChat)
-                .filter_by(acc_addr=addr, contact=user.acct)
+                .filter_by(acc_addr=acc.addr, contact=user.acct)
                 .first()
             )
             if dmchat:
                 chat = bot.get_chat(dmchat.chat_id)
                 replies.add(text="❌ Chat already exists, send messages here", chat=chat)
                 return
-            chat = bot.create_group(user.acct, [addr])
-            session.add(DmChat(chat_id=chat.id, contact=user.acct, acc_addr=addr))
+            chat = bot.create_group(
+                user.acct, bot.get_chat(acc.notifications).get_contacts()
+            )
+            session.add(DmChat(chat_id=chat.id, contact=user.acct, acc_addr=acc.addr))
 
         try:
             path = download_file(bot, user.avatar_static, ".jpg")
