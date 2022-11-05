@@ -242,9 +242,9 @@ def listen_to_mastodon(bot: DeltaBot) -> None:
     while True:
         bot.logger.debug("Checking Mastodon")
         instances: dict = {}
-        acc_count = 0
         with session_scope() as session:
-            bot.logger.debug("Accounts to check: %s", session.query(Account).count())
+            acc_count = session.query(Account).count()
+            bot.logger.debug("Accounts to check: %s", acc_count)
             for acc in session.query(Account):
                 instances.setdefault(acc.url, []).append(
                     (
@@ -256,9 +256,10 @@ def listen_to_mastodon(bot: DeltaBot) -> None:
                         acc.last_notif,
                     )
                 )
-                acc_count += 1
+
+        start_time = time.time()
         instances_count = len(instances)
-        while acc_count > 0:
+        while instances:
             bot.logger.debug(
                 f"Check: {acc_count} accounts across {instances_count} instances remaining..."
             )
@@ -304,7 +305,8 @@ def listen_to_mastodon(bot: DeltaBot) -> None:
                         f"❌ ERROR while checking your account: {ex}"
                     )
             time.sleep(2)
-        delay = int(getdefault(bot, "delay"))
+        elapsed = int(time.time() - start_time)
+        delay = max(int(getdefault(bot, "delay")) - elapsed, 10)
         bot.logger.info(
             f"Done checking {acc_count} accounts, sleeping for {delay} seconds..."
         )

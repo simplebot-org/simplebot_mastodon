@@ -7,6 +7,7 @@
 - add all address from Notifications chat to new created DM chats.
 - hidde `/reply`, `/star`, `/boost` and `/open` commands from help since they are not meant to be used
   manually.
+- discount from checking delay the time already spent checking.
 
 ## [v0.4.0]
 
