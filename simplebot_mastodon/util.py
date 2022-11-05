@@ -482,38 +482,32 @@ def _handle_dms(dms: list, bot: DeltaBot, addr: str, notif_chat: int) -> None:
 
 
 def _check_notifications(
-    bot: DeltaBot, masto: Mastodon, addr: str, notif_chat: int, last_notif: str
+    bot: DeltaBot, masto: Mastodon, addr: str, notif_chat: int, last_id: str
 ) -> None:
-    max_id = None
     dms = []
     notifications = []
-    while True:
-        bot.logger.debug(
-            f"{addr}: Getting Notifications (max_id={max_id}, since_id={last_notif})"
-        )
-        ns = masto.notifications(max_id=max_id, since_id=last_notif)
-        if not ns:
-            break
-        if max_id is None:
-            with session_scope() as session:
-                acc = session.query(Account).filter_by(addr=addr).first()
-                acc.last_notif = ns[0].id
-        max_id = ns[-1].id
-        for n in ns:
+    bot.logger.debug(f"{addr}: Getting Notifications (last_id={last_id})")
+    toots = masto.notifications(min_id=last_id, limit=100)
+    if toots:
+        with session_scope() as session:
+            acc = session.query(Account).filter_by(addr=addr).first()
+            acc.last_notif = last_id = toots[0].id
+        for toot in toots:
             if (
-                n.type == "mention"
-                and n.status.visibility == Visibility.DIRECT
-                and len(n.status.mentions) == 1
+                toot.type == "mention"
+                and toot.status.visibility == Visibility.DIRECT
+                and len(toot.status.mentions) == 1
             ):
-                dms.append(n.status)
+                dms.append(toot.status)
             else:
-                notifications.append(n)
+                notifications.append(toot)
 
     if dms:
+        bot.logger.debug(f"{addr}: Direct Messages: {len(dms)} new entries")
         _handle_dms(dms, bot, addr, notif_chat)
 
     bot.logger.debug(
-        f"{addr}: Notifications: {len(notifications)} new entries (last_id={last_notif})"
+        f"{addr}: Notifications: {len(notifications)} new entries (last_id={last_id})"
     )
     if notifications:
         chat = bot.get_chat(notif_chat)
@@ -524,30 +518,19 @@ def _check_notifications(
 
 
 def _check_home(
-    bot: DeltaBot, masto: Mastodon, addr: str, home_chat: int, last_home: str
+    bot: DeltaBot, masto: Mastodon, addr: str, home_chat: int, last_id: str
 ) -> None:
     me = masto.me()
-    max_id = None
-    toots: list = []
-    while True:
-        bot.logger.debug(
-            f"{addr}: Getting Home timeline (max_id={max_id}, since_id={last_home})"
-        )
-        ts = masto.timeline_home(max_id=max_id, since_id=last_home)
-        if not ts:
-            break
-        if max_id is None:
-            with session_scope() as session:
-                acc = session.query(Account).filter_by(addr=addr).first()
-                acc.last_home = ts[0].id
-        max_id = ts[-1].id
-        for t in ts:
-            for a in t.mentions:
-                if a.id == me.id:
-                    break
-            else:
-                toots.append(t)
-    bot.logger.debug(f"{addr}: Home: {len(toots)} new entries (last_id={last_home})")
+    bot.logger.debug(f"{addr}: Getting Home timeline (last_id={last_id})")
+    toots = masto.timeline_home(min_id=last_id, limit=100)
+    if toots:
+        with session_scope() as session:
+            acc = session.query(Account).filter_by(addr=addr).first()
+            acc.last_home = last_id = toots[0].id
+        toots = [
+            toot for toot in toots if me.id not in [acc.id for acc in toot.mentions]
+        ]
+    bot.logger.debug(f"{addr}: Home: {len(toots)} new entries (last_id={last_id})")
     if toots:
         chat = bot.get_chat(home_chat)
         replies = Replies(bot, bot.logger)

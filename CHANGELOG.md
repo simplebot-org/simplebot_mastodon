@@ -9,6 +9,7 @@
   manually.
 - discount from checking delay the time already spent checking.
 - reduce network timeout to 10 seconds.
+- improve fetching toots logic, reduce number of API calls.
 
 ### Fixed
 
