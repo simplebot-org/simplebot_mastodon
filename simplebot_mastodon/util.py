@@ -28,7 +28,7 @@ from .orm import Account, Client, DmChat, session_scope
 TOOT_SEP = "\n\n―――――――――――――――\n\n"
 STRFORMAT = "%Y-%m-%d %H:%M"
 web = requests.Session()
-web.request = functools.partial(web.request, timeout=15)  # type: ignore
+web.request = functools.partial(web.request, timeout=10)  # type: ignore
 
 
 class Visibility(str, Enum):
