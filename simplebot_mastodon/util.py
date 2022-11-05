@@ -257,19 +257,26 @@ def listen_to_mastodon(bot: DeltaBot) -> None:
                     )
                 )
                 acc_count += 1
-        while instances:
+        instances_count = len(instances)
+        while acc_count > 0:
+            bot.logger.debug(
+                f"Check: {acc_count} accounts across {instances_count} remaining..."
+            )
             for key in list(instances.keys()):
                 if not instances[key]:
                     instances.pop(key)
+                    instances_count -= 1
                     continue
                 addr, token, home_chat, last_home, notif_chat, last_notif = instances[
                     key
                 ].pop()
+                acc_count -= 1
                 bot.logger.debug(f"Checking account from: {addr}")
                 try:
                     masto = get_mastodon(key, token)
                     _check_notifications(bot, masto, addr, notif_chat, last_notif)
                     _check_home(bot, masto, addr, home_chat, last_home)
+                    bot.logger.debug(f"Done checking account from: {addr}")
                 except MastodonUnauthorizedError as ex:
                     bot.logger.exception(ex)
                     chats: List[int] = []
