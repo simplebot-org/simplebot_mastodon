@@ -498,7 +498,7 @@ def _check_notifications(
             with session_scope() as session:
                 acc = session.query(Account).filter_by(addr=addr).first()
                 acc.last_notif = ns[0].id
-        max_id = ns[-1]
+        max_id = ns[-1].id
         for n in ns:
             if (
                 n.type == "mention"
@@ -540,7 +540,7 @@ def _check_home(
             with session_scope() as session:
                 acc = session.query(Account).filter_by(addr=addr).first()
                 acc.last_home = ts[0].id
-        max_id = ts[-1]
+        max_id = ts[-1].id
         for t in ts:
             for a in t.mentions:
                 if a.id == me.id:
