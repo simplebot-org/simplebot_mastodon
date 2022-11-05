@@ -260,7 +260,7 @@ def listen_to_mastodon(bot: DeltaBot) -> None:
         instances_count = len(instances)
         while acc_count > 0:
             bot.logger.debug(
-                f"Check: {acc_count} accounts across {instances_count} remaining..."
+                f"Check: {acc_count} accounts across {instances_count} instances remaining..."
             )
             for key in list(instances.keys()):
                 if not instances[key]:
