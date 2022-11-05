@@ -79,6 +79,7 @@ def toots2replies(
                 if not text.startswith("http"):
                     text = "\n" + text
                 reply["text"] = reply["filename"] + "\n" + text
+                del reply["filename"]
         if reply:
             yield reply
 

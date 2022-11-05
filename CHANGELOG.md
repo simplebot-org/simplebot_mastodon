@@ -8,6 +8,11 @@
 - hidde `/reply`, `/star`, `/boost` and `/open` commands from help since they are not meant to be used
   manually.
 - discount from checking delay the time already spent checking.
+- reduce network timeout to 10 seconds.
+
+### Fixed
+
+- fix bug in utils.toots2replies()
 
 ## [v0.4.0]
 
