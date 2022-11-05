@@ -244,7 +244,7 @@ def listen_to_mastodon(bot: DeltaBot) -> None:
         instances: dict = {}
         with session_scope() as session:
             acc_count = session.query(Account).count()
-            bot.logger.debug("Accounts to check: %s", acc_count)
+            bot.logger.debug(f"Accounts to check: {acc_count}")
             for acc in session.query(Account):
                 instances.setdefault(acc.url, []).append(
                     (
@@ -272,12 +272,12 @@ def listen_to_mastodon(bot: DeltaBot) -> None:
                     key
                 ].pop()
                 acc_count -= 1
-                bot.logger.debug(f"Checking account from: {addr}")
+                bot.logger.debug(f"{addr}: Checking account")
                 try:
                     masto = get_mastodon(key, token)
                     _check_notifications(bot, masto, addr, notif_chat, last_notif)
                     _check_home(bot, masto, addr, home_chat, last_home)
-                    bot.logger.debug(f"Done checking account from: {addr}")
+                    bot.logger.debug(f"{addr}: Done checking account")
                 except MastodonUnauthorizedError as ex:
                     bot.logger.exception(ex)
                     chats: List[int] = []
@@ -487,6 +487,9 @@ def _check_notifications(
     dms = []
     notifications = []
     while True:
+        bot.logger.debug(
+            f"{addr}: Getting Notifications (max_id={max_id}, since_id={last_notif})"
+        )
         ns = masto.notifications(max_id=max_id, since_id=last_notif)
         if not ns:
             break
@@ -509,9 +512,7 @@ def _check_notifications(
         _handle_dms(dms, bot, addr, notif_chat)
 
     bot.logger.debug(
-        "Notifications: %s new entries (last id: %s)",
-        len(notifications),
-        last_notif,
+        f"{addr}: Notifications: {len(notifications)} new entries (last_id={last_notif})"
     )
     if notifications:
         chat = bot.get_chat(notif_chat)
@@ -528,6 +529,9 @@ def _check_home(
     max_id = None
     toots: list = []
     while True:
+        bot.logger.debug(
+            f"{addr}: Getting Home timeline (max_id={max_id}, since_id={last_home})"
+        )
         ts = masto.timeline_home(max_id=max_id, since_id=last_home)
         if not ts:
             break
@@ -542,7 +546,7 @@ def _check_home(
                     break
             else:
                 toots.append(t)
-    bot.logger.debug("Home: %s new entries (last id: %s)", len(toots), last_home)
+    bot.logger.debug(f"{addr}: Home: {len(toots)} new entries (last_id={last_home})")
     if toots:
         chat = bot.get_chat(home_chat)
         replies = Replies(bot, bot.logger)
