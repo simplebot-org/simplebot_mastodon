@@ -273,7 +273,7 @@ def listen_to_mastodon(bot: DeltaBot) -> None:
                     key
                 ].pop()
                 acc_count -= 1
-                bot.logger.debug(f"{addr}: Checking account")
+                bot.logger.debug(f"{addr}: Checking account ({key})")
                 try:
                     masto = get_mastodon(key, token)
                     _check_notifications(bot, masto, addr, notif_chat, last_notif)
