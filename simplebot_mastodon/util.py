@@ -248,6 +248,14 @@ def get_profile(bot: DeltaBot, masto: Mastodon, username: Optional[str] = None) 
 
 def listen_to_mastodon(bot: DeltaBot) -> None:
     while True:
+        try:
+            _check_mastodon(bot)
+        except Exception as ex:
+            bot.logger.exception(ex)
+
+
+def _check_mastodon(bot: DeltaBot) -> None:
+    while True:
         bot.logger.debug("Checking Mastodon")
         instances: dict = {}
         with session_scope() as session:
