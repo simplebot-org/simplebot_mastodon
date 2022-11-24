@@ -272,14 +272,13 @@ def listen_to_mastodon(bot: DeltaBot) -> None:
                 f"Check: {acc_count} accounts across {instances_count} instances remaining..."
             )
             for key in list(instances.keys()):
-                if not instances[key]:
-                    instances.pop(key)
-                    instances_count -= 1
-                    continue
                 addr, token, home_chat, last_home, notif_chat, last_notif = instances[
                     key
                 ].pop()
                 acc_count -= 1
+                if not instances[key]:
+                    instances.pop(key)
+                    instances_count -= 1
                 bot.logger.debug(f"{addr}: Checking account ({key})")
                 try:
                     masto = get_mastodon(key, token)
