@@ -38,7 +38,7 @@ def run_migrations(bot: DeltaBot) -> None:
             assert migration
             bot.logger.info(f"Migrating database: v{i}")
             with database:
-                database.execute("REPLACE INTO database VALUES (?,?)", (1, version))
+                database.execute("REPLACE INTO database VALUES (?,?)", (1, i))
                 migration(database)
     finally:
         database.close()
