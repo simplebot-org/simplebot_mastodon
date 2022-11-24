@@ -9,6 +9,7 @@ import simplebot
 from deltachat import Chat, Contact, Message
 from simplebot.bot import DeltaBot, Replies
 
+from .migrations import run_migrations
 from .orm import Account, DmChat, OAuth, init, session_scope
 from .util import (
     TOOT_SEP,
@@ -17,6 +18,7 @@ from .util import (
     download_file,
     get_account_from_msg,
     get_client,
+    get_database_path,
     get_mastodon,
     get_mastodon_from_msg,
     get_profile,
@@ -62,10 +64,10 @@ def deltabot_init(bot: DeltaBot) -> None:
     desc = f"Unfollow the user with the given account name or id.\n\nExample:\n/{pref}unfollow user@mastodon.social"
     bot.commands.register(func=unfollow_cmd, name=f"/{pref}unfollow", help=desc)
 
-    desc = f"Mute the user with the given account name or id.\n\nExample:\n/{pref}mute user@mastodon.social"
+    desc = f"Mute the user with the given account name or id. If sent in the Home chat it will mute the Home timeline.\n\nExample:\n/{pref}mute user@mastodon.social\n\nTo mute Home timeline:\n/{pref}mute"
     bot.commands.register(func=mute_cmd, name=f"/{pref}mute", help=desc)
 
-    desc = f"Unmute the user with the given account name or id.\n\nExample:\n/{pref}unmute user@mastodon.social"
+    desc = f"Unmute the user with the given account name or id. If sent in the Home chat it will unmute the Home timeline.\n\nExample:\n/{pref}unmute user@mastodon.social\n\nTo unmute Home timeline:\n/{pref}unmute"
     bot.commands.register(func=unmute_cmd, name=f"/{pref}unmute", help=desc)
 
     desc = f"Block the user with the given account name or id.\n\nExample:\n/{pref}block user@mastodon.social"
@@ -86,11 +88,8 @@ def deltabot_init(bot: DeltaBot) -> None:
 
 @simplebot.hookimpl
 def deltabot_start(bot: DeltaBot) -> None:
-    path = os.path.join(os.path.dirname(bot.account.db_path), __name__)
-    if not os.path.exists(path):
-        os.makedirs(path)
-    path = os.path.join(path, "sqlite.db")
-    init(f"sqlite:///{path}")
+    run_migrations(bot)
+    init(f"sqlite:///{get_database_path(bot)}")
     Thread(target=listen_to_mastodon, args=(bot,), daemon=True).start()
 
 
@@ -307,8 +306,10 @@ def _login(
         )
 
     hgroup.set_profile_image(MASTODON_LOGO)
+    pref = getdefault(bot, "cmd_prefix", "")
     replies.add(
-        text=f"ℹ️ Messages sent here will be published in @{uname}@{url}", chat=hgroup
+        text=f"ℹ️ Messages sent here will be published in @{uname}@{url}\n\nIf your Home timeline is too noisy and you would like to disable incoming toots, send /{prefix}mute here.",
+        chat=hgroup,
     )
 
     ngroup.set_profile_image(MASTODON_LOGO)
@@ -501,17 +502,50 @@ def unfollow_cmd(payload: str, message: Message, replies: Replies) -> None:
 
 
 def mute_cmd(payload: str, message: Message, replies: Replies) -> None:
-    replies.add(
-        text=account_action("account_mute", payload, message) or "✔️ User muted",
-        quote=message,
-    )
+    if payload:
+        replies.add(
+            text=account_action("account_mute", payload, message) or "✔️ User muted",
+            quote=message,
+        )
+        return
+    # check if the message was sent in the Home chat
+    with session_scope() as session:
+        acc = session.query(Account).filter_by(home=message.chat.id).first()
+        if acc:
+            acc.muted_home = True
+            replies.add(
+                text="✔️ Home timeline muted",
+                quote=message,
+            )
+        else:
+            replies.add(
+                text="❌ Wrong usage, you must send that command in the Home chat to mute it",
+                quote=message,
+            )
 
 
 def unmute_cmd(payload: str, message: Message, replies: Replies) -> None:
-    replies.add(
-        text=account_action("account_unmute", payload, message) or "✔️ User unmuted",
-        quote=message,
-    )
+    if payload:
+        replies.add(
+            text=account_action("account_unmute", payload, message)
+            or "✔️ User unmuted",
+            quote=message,
+        )
+        return
+    # check if the message was sent in the Home chat
+    with session_scope() as session:
+        acc = session.query(Account).filter_by(home=message.chat.id).first()
+        if acc:
+            acc.muted_home = False
+            replies.add(
+                text="✔️ Home timeline unmuted",
+                quote=message,
+            )
+        else:
+            replies.add(
+                text="❌ Wrong usage, you must send that command in the Home chat to unmute it",
+                quote=message,
+            )
 
 
 def block_cmd(payload: str, message: Message, replies: Replies) -> None:

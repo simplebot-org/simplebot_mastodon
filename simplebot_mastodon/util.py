@@ -27,6 +27,7 @@ from .orm import Account, Client, DmChat, session_scope
 
 TOOT_SEP = "\n\n―――――――――――――――\n\n"
 STRFORMAT = "%Y-%m-%d %H:%M"
+_scope = __name__.split(".", maxsplit=1)[0]
 web = requests.Session()
 web.request = functools.partial(web.request, timeout=10)  # type: ignore
 
@@ -190,12 +191,18 @@ def normalize_url(url: str) -> str:
 
 
 def getdefault(bot: DeltaBot, key: str, value: str = None) -> str:
-    scope = __name__.split(".", maxsplit=1)[0]
-    val = bot.get(key, scope=scope)
+    val = bot.get(key, scope=_scope)
     if val is None and value is not None:
-        bot.set(key, value, scope=scope)
+        bot.set(key, value, scope=_scope)
         val = value
     return val
+
+
+def get_database_path(bot: DeltaBot) -> str:
+    path = os.path.join(os.path.dirname(bot.account.db_path), _scope)
+    if not os.path.exists(path):
+        os.makedirs(path)
+    return os.path.join(path, "sqlite.db")
 
 
 def get_profile(bot: DeltaBot, masto: Mastodon, username: str = None) -> str:

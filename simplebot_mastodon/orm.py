@@ -1,7 +1,7 @@
 from contextlib import contextmanager
 from threading import Lock
 
-from sqlalchemy import Column, ForeignKey, Integer, String, create_engine
+from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, create_engine
 from sqlalchemy.ext.declarative import declarative_base, declared_attr
 from sqlalchemy.orm import relationship, sessionmaker
 
@@ -26,6 +26,7 @@ class Account(Base):
     notifications = Column(Integer, nullable=False)
     last_home = Column(String(1000))
     last_notif = Column(String(1000))
+    muted_home = Column(Boolean)
 
     dm_chats = relationship(
         "DmChat", backref="account", cascade="all, delete, delete-orphan"
