@@ -268,6 +268,7 @@ def _check_mastodon(bot: DeltaBot) -> None:
                         acc.token,
                         acc.home,
                         acc.last_home,
+                        acc.muted_home,
                         acc.notifications,
                         acc.last_notif,
                     )
@@ -280,9 +281,15 @@ def _check_mastodon(bot: DeltaBot) -> None:
                 f"Check: {acc_count} accounts across {instances_count} instances remaining..."
             )
             for key in list(instances.keys()):
-                addr, token, home_chat, last_home, notif_chat, last_notif = instances[
-                    key
-                ].pop()
+                (
+                    addr,
+                    token,
+                    home_chat,
+                    last_home,
+                    muted_home,
+                    notif_chat,
+                    last_notif,
+                ) = instances[key].pop()
                 acc_count -= 1
                 if not instances[key]:
                     instances.pop(key)
@@ -291,7 +298,10 @@ def _check_mastodon(bot: DeltaBot) -> None:
                 try:
                     masto = get_mastodon(key, token)
                     _check_notifications(bot, masto, addr, notif_chat, last_notif)
-                    _check_home(bot, masto, addr, home_chat, last_home)
+                    if muted_home:
+                        bot.logger.debug(f"{addr}: Ignoring Home timeline (muted)")
+                    else:
+                        _check_home(bot, masto, addr, home_chat, last_home)
                     bot.logger.debug(f"{addr}: Done checking account")
                 except MastodonUnauthorizedError as ex:
                     bot.logger.exception(ex)

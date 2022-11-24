@@ -513,6 +513,7 @@ def mute_cmd(payload: str, message: Message, replies: Replies) -> None:
         acc = session.query(Account).filter_by(home=message.chat.id).first()
         if acc:
             acc.muted_home = True
+            acc.last_home = None
             replies.add(
                 text="✔️ Home timeline muted",
                 quote=message,
@@ -537,6 +538,8 @@ def unmute_cmd(payload: str, message: Message, replies: Replies) -> None:
         acc = session.query(Account).filter_by(home=message.chat.id).first()
         if acc:
             acc.muted_home = False
+            toots = get_mastodon(acc.url, acc.token).timeline_home(limit=1)
+            acc.last_home = toots[0].id if toots else None
             replies.add(
                 text="✔️ Home timeline unmuted",
                 quote=message,
