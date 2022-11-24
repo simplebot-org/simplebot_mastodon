@@ -308,7 +308,7 @@ def _login(
     hgroup.set_profile_image(MASTODON_LOGO)
     pref = getdefault(bot, "cmd_prefix", "")
     replies.add(
-        text=f"ℹ️ Messages sent here will be published in @{uname}@{url}\n\nIf your Home timeline is too noisy and you would like to disable incoming toots, send /{prefix}mute here.",
+        text=f"ℹ️ Messages sent here will be published in @{uname}@{url}\n\nIf your Home timeline is too noisy and you would like to disable incoming toots, send /{pref}mute here.",
         chat=hgroup,
     )
 
