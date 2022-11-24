@@ -190,7 +190,7 @@ def normalize_url(url: str) -> str:
     return url.rstrip("/")
 
 
-def getdefault(bot: DeltaBot, key: str, value: str = None) -> str:
+def getdefault(bot: DeltaBot, key: str, value: Optional[str] = None) -> str:
     val = bot.get(key, scope=_scope)
     if val is None and value is not None:
         bot.set(key, value, scope=_scope)
@@ -205,7 +205,7 @@ def get_database_path(bot: DeltaBot) -> str:
     return os.path.join(path, "sqlite.db")
 
 
-def get_profile(bot: DeltaBot, masto: Mastodon, username: str = None) -> str:
+def get_profile(bot: DeltaBot, masto: Mastodon, username: Optional[str] = None) -> str:
     me = masto.me()
     if not username:
         user = me
@@ -323,10 +323,10 @@ def listen_to_mastodon(bot: DeltaBot) -> None:
 
 def send_toot(
     masto: Mastodon,
-    text: str = None,
-    filename: str = None,
-    visibility: str = None,
-    in_reply_to: str = None,
+    text: Optional[str] = None,
+    filename: Optional[str] = None,
+    visibility: Optional[str] = None,
+    in_reply_to: Optional[str] = None,
 ) -> None:
     if filename:
         if filename.endswith(".aac"):
@@ -366,7 +366,7 @@ def get_client(session, api_url) -> tuple:
     return client_id, client_secret
 
 
-def get_mastodon(api_url: str, token: str = None, **kwargs) -> Mastodon:
+def get_mastodon(api_url: str, token: Optional[str] = None, **kwargs) -> Mastodon:
     return Mastodon(
         access_token=token,
         api_base_url=api_url,
