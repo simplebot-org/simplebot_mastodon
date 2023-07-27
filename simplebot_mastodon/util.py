@@ -128,7 +128,7 @@ def toot2reply(prefix: str, toot: AttribAccessDict, notification: bool = False) 
         paragraph.replace_with(paragraph.get_text() + "\n\n")
     text += soup.get_text()
 
-    text += f"\n\n[{v2emoji[toot.visibility]} {toot.created_at.strftime(STRFORMAT)}]\n"
+    text += f"\n\n[{v2emoji[toot.visibility]} {toot.created_at.strftime(STRFORMAT)}]({toot.url})\n"
     if not notification or is_mention:
         text += f"↩️ /{prefix}reply_{toot.id}\n"
         text += f"⭐ /{prefix}star_{toot.id}\n"
