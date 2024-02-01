@@ -62,10 +62,8 @@ class AccountPlugin:
             if masto:
                 if star:
                     masto.status_favourite(toot_id)
-                    msg.send_reaction(STAR_REACTIONS[0])
                 else:
                     masto.status_unfavourite(toot_id)
-                    msg.send_reaction("")
 
 
 @simplebot.hookimpl
