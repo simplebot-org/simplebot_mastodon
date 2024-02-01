@@ -1,12 +1,14 @@
 """hooks, filters and commands"""
 
 import os
+import re
 from threading import Thread
 from typing import List
 
 import mastodon
 import simplebot
-from deltachat import Chat, Contact, Message
+from deltachat import Chat, Contact, Message, account_hookimpl
+from deltachat.events import FFIEvent
 from simplebot.bot import DeltaBot, Replies
 
 from .migrations import run_migrations
@@ -31,10 +33,45 @@ from .util import (
 )
 
 MASTODON_LOGO = os.path.join(os.path.dirname(__file__), "mastodon-logo.png")
+STAR_REACTIONS = ["⭐", "👍", "❤️"]
+
+
+class AccountPlugin:
+    def __init__(self, bot: DeltaBot) -> None:
+        self.bot = bot
+
+    @account_hookimpl
+    def ac_process_ffi_event(self, ffi_event: FFIEvent) -> None:
+        if ffi_event.name == "DC_EVENT_REACTIONS_CHANGED":
+            msg = self.bot.account.get_message_by_id(ffi_event.data2)
+
+            toot_id = re.findall(r"/star_(\d+)", msg.text)
+            if len(toot_id) != 1:
+                return
+            toot_id = toot_id[0]
+
+            star = False
+            reactions = msg.get_reactions()
+            for contact in reactions.get_contacts():
+                for reaction in reactions.get_by_contact(contact).split():
+                    if reaction in STAR_REACTIONS:
+                        star = True
+                        break
+
+            masto = get_mastodon_from_msg(msg)
+            if masto:
+                if star:
+                    masto.status_favourite(toot_id)
+                    msg.send_reaction(STAR_REACTIONS[0])
+                else:
+                    masto.status_unfavourite(toot_id)
+                    msg.send_reaction("")
 
 
 @simplebot.hookimpl
 def deltabot_init(bot: DeltaBot) -> None:
+    bot.account.add_account_plugin(AccountPlugin(bot))
+
     getdefault(bot, "delay", "30")
     getdefault(bot, "max_users", "-1")
     getdefault(bot, "max_users_instance", "-1")
