@@ -94,7 +94,9 @@ def toot2reply(prefix: str, toot: AttribAccessDict, notification: bool = False) 
         if toot.type == "reblog":
             text = f"🔁 {_get_name(toot.account)} boosted your toot. ({timestamp})\n\n"
         elif toot.type == "favourite":
-            text = f"⭐ {_get_name(toot.account)} favorited your toot. ({timestamp})\n\n"
+            text = (
+                f"⭐ {_get_name(toot.account)} favorited your toot. ({timestamp})\n\n"
+            )
         elif toot.type == "follow":
             return {"text": f"👤 {_get_name(toot.account)} followed you. ({timestamp})"}
         elif toot.type == "mention":

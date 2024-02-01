@@ -441,7 +441,9 @@ def dm_cmd(bot: DeltaBot, payload: str, message: Message, replies: Replies) -> N
             )
             if dmchat:
                 chat = bot.get_chat(dmchat.chat_id)
-                replies.add(text="❌ Chat already exists, send messages here", chat=chat)
+                replies.add(
+                    text="❌ Chat already exists, send messages here", chat=chat
+                )
                 return
             chat = bot.create_group(
                 user.acct, bot.get_chat(acc.notifications).get_contacts()
@@ -514,9 +516,11 @@ def open_cmd(bot: DeltaBot, payload: str, message: Message, replies: Replies) ->
                 context["ancestors"] + [masto.status(payload)] + context["descendants"]
             )
             replies.add(
-                text=TOOT_SEP.join(toots2texts(bot, toots))
-                if toots
-                else "❌ Nothing found",
+                text=(
+                    TOOT_SEP.join(toots2texts(bot, toots))
+                    if toots
+                    else "❌ Nothing found"
+                ),
                 quote=message,
             )
         else:
@@ -565,8 +569,7 @@ def mute_cmd(payload: str, message: Message, replies: Replies) -> None:
 def unmute_cmd(payload: str, message: Message, replies: Replies) -> None:
     if payload:
         replies.add(
-            text=account_action("account_unmute", payload, message)
-            or "✔️ User unmuted",
+            text=account_action("account_unmute", payload, message) or "✔️ User unmuted",
             quote=message,
         )
         return
