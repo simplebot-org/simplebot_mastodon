@@ -46,4 +46,8 @@ def run_migrations(bot: DeltaBot) -> None:
 
 
 def migrate1(database: sqlite3.Connection) -> None:
-    database.execute("ALTER TABLE account ADD COLUMN  muted_home BOOLEAN")
+    try:
+        database.execute("ALTER TABLE account ADD COLUMN  muted_home BOOLEAN")
+    except Exception as ex:
+        # ignore to avoid crash caused by accidental empty database table
+        print(f"WARNING: ignoring exception: {ex}")
