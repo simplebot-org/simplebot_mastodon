@@ -217,7 +217,8 @@ def filter_messages(bot: DeltaBot, message: Message, replies: Replies) -> None:
                 api_url = acc.url
                 token = acc.token
                 args: tuple = (message.text, message.filename)
-        else:
+        else if len(message.chat.get_contacts()) <= 2:
+            # only send directly if not in team usage
             dmchat = session.query(DmChat).filter_by(chat_id=message.chat.id).first()
             if dmchat:
                 api_url = dmchat.account.url
