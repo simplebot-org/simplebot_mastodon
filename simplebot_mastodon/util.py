@@ -88,8 +88,8 @@ def toots2replies(
 def toot2reply(prefix: str, toot: AttribAccessDict, notification: bool = False) -> dict:
     text = ""
     reply = {}
+    is_mention = False
     if notification:
-        is_mention = False
         timestamp = toot.created_at.strftime(STRFORMAT)
         if toot.type == "reblog":
             text = f"🔁 {_get_name(toot.account)} boosted your toot. ({timestamp})\n\n"
@@ -216,7 +216,6 @@ def get_profile(bot: DeltaBot, masto: Mastodon, username: Optional[str] = None) 
         if user is None:
             return "❌ Invalid user"
 
-    rel = masto.account_relationships(user)[0] if user.id != me.id else None
     text = f"{_get_name(user)}:\n\n"
     fields = ""
     for f in user.fields:
@@ -226,6 +225,7 @@ def get_profile(bot: DeltaBot, masto: Mastodon, username: Optional[str] = None) 
     text += html2text(user.note).strip()
     text += f"\n\nToots: {user.statuses_count}\nFollowing: {user.following_count}\nFollowers: {user.followers_count}"
     if user.id != me.id:
+        rel = masto.account_relationships(user)[0]
         if rel["followed_by"]:
             text += "\n[follows you]"
         elif rel["blocked_by"]:

@@ -136,6 +136,7 @@ def deltabot_member_removed(
         return
 
     url = ""
+    addr = ""
     chats: List[int] = []
     with session_scope() as session:
         acc = (
@@ -203,6 +204,8 @@ def filter_messages(bot: DeltaBot, message: Message, replies: Replies) -> None:
         return
 
     api_url: str = ""
+    token = ""
+    args: tuple = ()
     with session_scope() as session:
         acc = (
             session.query(Account)
@@ -216,7 +219,7 @@ def filter_messages(bot: DeltaBot, message: Message, replies: Replies) -> None:
             if acc.home == message.chat.id:
                 api_url = acc.url
                 token = acc.token
-                args: tuple = (message.text, message.filename)
+                args = (message.text, message.filename)
         elif len(message.chat.get_contacts()) <= 2:
             # only send directly if not in team usage
             dmchat = session.query(DmChat).filter_by(chat_id=message.chat.id).first()
