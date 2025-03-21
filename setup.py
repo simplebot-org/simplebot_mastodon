@@ -41,7 +41,7 @@ if __name__ == "__main__":
         long_description=long_description,
         long_description_content_type="text/x-rst",
         author="adbenitez",
-        author_email="adbenitez@nauta.cu",
+        author_email="adb@arcanechat.me",
         url=URL,
         keywords=KEYWORDS,
         license="MPL",
