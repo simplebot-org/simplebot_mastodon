@@ -6,3 +6,4 @@ isort==5.10.1
 pylint==2.16.2
 pylama==8.4.1
 types-requests==2.28.11.15
+setuptools
