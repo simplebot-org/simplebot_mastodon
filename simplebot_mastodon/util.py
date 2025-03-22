@@ -87,20 +87,19 @@ def toots2replies(
 
 def toot2reply(
     prefix: str,
-    toot: AttribAccessDict | list[AttribAccessDict],
+    toots: AttribAccessDict | list[AttribAccessDict],
     notification: bool = False,
 ) -> dict:
     text = ""
     reply = {}
     is_mention = False
     if notification:
-        collapsed = isinstance(toot, list)
-        if collapsed:
-            toot_type = toot[0].type
-            name = ", ".join(_get_name(t.account) for t in toot)
+        if isinstance(toots, list):
+            toot_type = toots[0].type
+            name = ", ".join(_get_name(t.account) for t in toots)
         else:
-            toot_type = toot.type
-            name = _get_name(toot.account)
+            toot_type = toots.type
+            name = _get_name(toots.account)
 
         if toot_type == "reblog":
             text = f"🔁 {name} boosted your toot.\n\n"
@@ -114,13 +113,15 @@ def toot2reply(
         else:  # unsupported type
             return {}
 
-        toot = toot[0].status if collapsed else toot.status
-    elif toot.reblog:
-        reply["sender"] = _get_name(toot.reblog.account)
-        text += f"🔁 {_get_name(toot.account)}\n\n"
-        toot = toot.reblog
+        toot = toots[0].status if isinstance(toots, list) else toots.status
+    elif not isinstance(toots, list) and toots.reblog:
+        reply["sender"] = _get_name(toots.reblog.account)
+        text += f"🔁 {_get_name(toots.account)}\n\n"
+        toot = toots.reblog
     else:
-        reply["sender"] = _get_name(toot.account)
+        assert not isinstance(toots, list)
+        reply["sender"] = _get_name(toots.account)
+        toot = toots
 
     if toot.media_attachments and (not notification or is_mention):
         reply["filename"] = toot.media_attachments.pop(0).url
@@ -131,7 +132,7 @@ def toot2reply(
     if toot.mentions:
         accts = {e.url: "@" + e.acct for e in toot.mentions}
         for anchor in soup("a", class_="u-url"):
-            name = accts.get(anchor["href"])
+            name = accts.get(anchor["href"], "")
             if name:
                 anchor.string = name
     for linebreak in soup("br"):
@@ -546,8 +547,8 @@ def _check_notifications(
         f"{addr}: Notifications: {len(notifications)} new entries (last_id={last_id})"
     )
     if notifications:
-        reblogs = {}
-        favs = {}
+        reblogs: dict[str, AttribAccessDict] = {}
+        favs: dict[str, AttribAccessDict] = {}
         follows = []
         mentions = []
         for toot in reversed(notifications):

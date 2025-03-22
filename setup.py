@@ -53,6 +53,7 @@ if __name__ == "__main__":
             "Operating System :: OS Independent",
             "Topic :: Utilities",
         ],
+        python_requires=">=3.10",
         zip_safe=False,
         include_package_data=True,
         packages=find_packages(),
