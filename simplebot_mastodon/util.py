@@ -85,26 +85,36 @@ def toots2replies(
             yield reply
 
 
-def toot2reply(prefix: str, toot: AttribAccessDict, notification: bool = False) -> dict:
+def toot2reply(
+    prefix: str,
+    toot: AttribAccessDict | list[AttribAccessDict],
+    notification: bool = False,
+) -> dict:
     text = ""
     reply = {}
     is_mention = False
     if notification:
-        timestamp = toot.created_at.strftime(STRFORMAT)
-        if toot.type == "reblog":
-            text = f"🔁 {_get_name(toot.account)} boosted your toot. ({timestamp})\n\n"
-        elif toot.type == "favourite":
-            text = (
-                f"⭐ {_get_name(toot.account)} favorited your toot. ({timestamp})\n\n"
-            )
-        elif toot.type == "follow":
-            return {"text": f"👤 {_get_name(toot.account)} followed you. ({timestamp})"}
-        elif toot.type == "mention":
+        collapsed = isinstance(toot, list)
+        if collapsed:
+            toot_type = toot[0].type
+            name = ", ".join(_get_name(t.account) for t in toot)
+        else:
+            toot_type = toot.type
+            name = _get_name(toot.account)
+
+        if toot_type == "reblog":
+            text = f"🔁 {name} boosted your toot.\n\n"
+        elif toot_type == "favourite":
+            text = f"⭐ {name} favorited your toot.\n\n"
+        elif toot_type == "follow":
+            return {"text": f"👤 {name} followed you."}
+        elif toot_type == "mention":
             is_mention = True
-            reply["sender"] = _get_name(toot.account)
+            reply["sender"] = name
         else:  # unsupported type
             return {}
-        toot = toot.status
+
+        toot = toot[0].status if collapsed else toot.status
     elif toot.reblog:
         reply["sender"] = _get_name(toot.reblog.account)
         text += f"🔁 {_get_name(toot.account)}\n\n"
@@ -536,9 +546,23 @@ def _check_notifications(
         f"{addr}: Notifications: {len(notifications)} new entries (last_id={last_id})"
     )
     if notifications:
+        reblogs = {}
+        favs = {}
+        follows = []
+        mentions = []
+        for toot in reversed(notifications):
+            if toot.type == "reblog":
+                reblogs.setdefault(toot.status.id, []).append(toot)
+            elif toot.type == "favourite":
+                favs.setdefault(toot.status.id, []).append(toot)
+            elif toot.type == "follow":
+                follows.append(toot)
+            else:
+                mentions.append(toot)
+        notifs = [*reblogs.values(), *favs.values(), follows] + mentions
         chat = bot.get_chat(notif_chat)
         replies = Replies(bot, bot.logger)
-        for reply in toots2replies(bot, reversed(notifications), True):
+        for reply in toots2replies(bot, notifs, True):
             replies.add(**reply, chat=chat)
             replies.send_reply_messages()
 
