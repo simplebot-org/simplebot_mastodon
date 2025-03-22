@@ -560,7 +560,9 @@ def _check_notifications(
                 follows.append(toot)
             else:
                 mentions.append(toot)
-        notifs = [*reblogs.values(), *favs.values(), follows] + mentions
+        notifs = [*reblogs.values(), *favs.values()] + mentions
+        if follows:
+            notifs.append(follows)
         chat = bot.get_chat(notif_chat)
         replies = Replies(bot, bot.logger)
         for reply in toots2replies(bot, notifs, True):
