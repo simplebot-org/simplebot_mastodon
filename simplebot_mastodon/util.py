@@ -47,12 +47,10 @@ v2emoji = {
 }
 
 
-def toots2texts(
-    bot: DeltaBot, toots: Iterable, notifications: bool = False
-) -> Generator:
+def toots2texts(bot: DeltaBot, toots: Iterable) -> Generator:
     prefix = getdefault(bot, "cmd_prefix", "")
     for toot in toots:
-        reply = toot2reply(prefix, toot, notifications)
+        reply = toot2reply(prefix, toot)
         text = reply.get("text", "")
         if reply.get("filename"):
             if not text.startswith("http"):
@@ -65,12 +63,10 @@ def toots2texts(
             yield text
 
 
-def toots2replies(
-    bot: DeltaBot, toots: Iterable, notifications: bool = False
-) -> Generator:
+def toots2replies(bot: DeltaBot, toots: Iterable) -> Generator:
     prefix = getdefault(bot, "cmd_prefix", "")
     for toot in toots:
-        reply = toot2reply(prefix, toot, notifications)
+        reply = toot2reply(prefix, toot)
         if reply.get("filename"):
             try:
                 reply["filename"] = download_file(bot, reply["filename"])
@@ -85,47 +81,18 @@ def toots2replies(
             yield reply
 
 
-def toot2reply(
-    prefix: str,
-    toots: AttribAccessDict | list[AttribAccessDict],
-    notification: bool = False,
-) -> dict:
+def toot2reply(prefix: str, toot: AttribAccessDict) -> dict:
     text = ""
     reply = {}
-    is_mention = False
-    if notification:
-        if isinstance(toots, list):
-            toot_type = toots[0].type
-            name = ", ".join(_get_name(t.account) for t in toots)
-        else:
-            toot_type = toots.type
-            name = _get_name(toots.account)
-
-        if toot_type == "reblog":
-            text = f"🔁 {name} boosted your toot.\n\n"
-        elif toot_type == "favourite":
-            text = f"⭐ {name} favorited your toot.\n\n"
-        elif toot_type == "follow":
-            return {"text": f"👤 {name} followed you."}
-        elif toot_type == "mention":
-            is_mention = True
-            reply["sender"] = name
-        else:  # unsupported type
-            return {}
-
-        toot = toots[0].status if isinstance(toots, list) else toots.status
-    elif not isinstance(toots, list) and toots.reblog:
-        reply["sender"] = _get_name(toots.reblog.account)
-        text += f"🔁 {_get_name(toots.account)}\n\n"
-        toot = toots.reblog
+    if toot.reblog:
+        reply["sender"] = _get_name(toot.reblog.account)
+        text += f"🔁 {_get_name(toot.account)}\n\n"
+        toot = toot.reblog
     else:
-        assert not isinstance(toots, list)
-        reply["sender"] = _get_name(toots.account)
-        toot = toots
+        reply["sender"] = _get_name(toot.account)
 
-    if toot.media_attachments and (not notification or is_mention):
-        reply["filename"] = toot.media_attachments.pop(0).url
     if toot.media_attachments:
+        reply["filename"] = toot.media_attachments.pop(0).url
         text += "\n".join(media.url for media in toot.media_attachments) + "\n\n"
 
     soup = BeautifulSoup(toot.content, "html.parser")
@@ -142,16 +109,42 @@ def toot2reply(
     text += soup.get_text()
 
     text += f"\n\n[{v2emoji[toot.visibility]} {toot.created_at.strftime(STRFORMAT)}]({toot.url})\n"
-    if not notification or is_mention:
-        text += f"↩️ /{prefix}reply_{toot.id}\n"
-        text += f"⭐ /{prefix}star_{toot.id}\n"
-        if toot.visibility in (Visibility.PUBLIC, Visibility.UNLISTED):
-            text += f"🔁 /{prefix}boost_{toot.id}\n"
-        text += f"⏫ /{prefix}open_{toot.id}\n"
-        text += f"👤 /{prefix}profile_{toot.account.id}\n"
+    text += f"↩️ /{prefix}reply_{toot.id}\n"
+    text += f"⭐ /{prefix}star_{toot.id}\n"
+    if toot.visibility in (Visibility.PUBLIC, Visibility.UNLISTED):
+        text += f"🔁 /{prefix}boost_{toot.id}\n"
+    text += f"⏫ /{prefix}open_{toot.id}\n"
+    text += f"👤 /{prefix}profile_{toot.account.id}\n"
 
     reply["text"] = text
     return reply
+
+
+def notif2replies(toots: Iterable) -> Generator:
+    for toot in toots:
+        reply = notif2reply(toot)
+        if reply:
+            yield reply
+
+
+def notif2reply(toots: list[AttribAccessDict]) -> dict:
+    toot_type = toots[0].type
+    name = ", ".join(_get_name(t.account) for t in toots)
+
+    if toot_type == "follow":
+        return {"text": f"👤 {name} followed you."}
+
+    if toot_type == "reblog":
+        text = f"🔁 {name} boosted your toot."
+    elif toot_type == "favourite":
+        text = f"⭐ {name} favorited your toot."
+    else:  # unsupported type
+        assert toot_type != "mention"  # mentions are handled with toots2replies
+        return {}
+
+    toot = toots[0].status
+    text += f"\n\n[{v2emoji[toot.visibility]} {toot.created_at.strftime(STRFORMAT)}]({toot.url})"
+    return {"text": text, "html": toot.content}
 
 
 def get_extension(resp: requests.Response) -> str:
@@ -559,13 +552,16 @@ def _check_notifications(
             elif toot.type == "follow":
                 follows.append(toot)
             else:
-                mentions.append(toot)
-        notifs = [*reblogs.values(), *favs.values()] + mentions
+                mentions.append(toot.status)
+        notifs = [*reblogs.values(), *favs.values()]
         if follows:
             notifs.append(follows)
         chat = bot.get_chat(notif_chat)
         replies = Replies(bot, bot.logger)
-        for reply in toots2replies(bot, notifs, True):
+        for reply in notif2replies(notifs):
+            replies.add(**reply, chat=chat)
+            replies.send_reply_messages()
+        for reply in toots2replies(bot, mentions):
             replies.add(**reply, chat=chat)
             replies.send_reply_messages()
 
