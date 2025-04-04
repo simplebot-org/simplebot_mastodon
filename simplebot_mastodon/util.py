@@ -25,6 +25,11 @@ from simplebot.bot import DeltaBot, Replies
 
 from .orm import Account, Client, DmChat, session_scope
 
+SPAM = [
+    "/fediversechick/",
+    "https://discord.gg/83CnebyzXh",
+    "https://matrix.to/#/#nicoles_place:matrix.org",
+]
 TOOT_SEP = "\n\n―――――――――――――――\n\n"
 STRFORMAT = "%Y-%m-%d %H:%M"
 _scope = __name__.split(".", maxsplit=1)[0]
@@ -528,7 +533,9 @@ def _check_notifications(
                 and toot.status.visibility == Visibility.DIRECT
                 and len(toot.status.mentions) == 1
             ):
-                dms.append(toot.status)
+                content = toot.status.content
+                if not any(keyword in content for keyword in SPAM):
+                    dms.append(toot.status)
             else:
                 notifications.append(toot)
 
