@@ -287,6 +287,7 @@ def _check_mastodon(bot: DeltaBot) -> None:
 
         start_time = time.time()
         instances_count = len(instances)
+        total_acc = acc_count
         while instances:
             bot.logger.debug(
                 f"Check: {acc_count} accounts across {instances_count} instances remaining..."
@@ -344,7 +345,7 @@ def _check_mastodon(bot: DeltaBot) -> None:
         elapsed = int(time.time() - start_time)
         delay = max(int(getdefault(bot, "delay")) - elapsed, 10)
         bot.logger.info(
-            f"Done checking {acc_count} accounts, sleeping for {delay} seconds..."
+            f"Done checking {total_acc} accounts, sleeping for {delay} seconds..."
         )
         time.sleep(delay)
 
