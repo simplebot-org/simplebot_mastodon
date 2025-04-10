@@ -551,7 +551,8 @@ def mute_cmd(payload: str, message: Message, replies: Replies) -> None:
             quote=message,
         )
         return
-    # check if the message was sent in the Home chat
+
+    # check if the message was sent in the Home or Notifications chat
     with session_scope() as session:
         acc = session.query(Account).filter_by(home=message.chat.id).first()
         if acc:
@@ -561,9 +562,18 @@ def mute_cmd(payload: str, message: Message, replies: Replies) -> None:
                 text="✔️ Home timeline muted",
                 quote=message,
             )
+            return
+
+        acc = session.query(Account).filter_by(notifications=message.chat.id).first()
+        if acc:
+            acc.muted_notif = True
+            replies.add(
+                text="✔️ Notifications timeline muted, favorites and boosts will not be notified",
+                quote=message,
+            )
         else:
             replies.add(
-                text="❌ Wrong usage, you must send that command in the Home chat to mute it",
+                text="❌ Wrong usage, you must send that command in the Home or Notifications chat to mute them",
                 quote=message,
             )
 
@@ -575,7 +585,8 @@ def unmute_cmd(payload: str, message: Message, replies: Replies) -> None:
             quote=message,
         )
         return
-    # check if the message was sent in the Home chat
+
+    # check if the message was sent in the Home or Notifications chat
     with session_scope() as session:
         acc = session.query(Account).filter_by(home=message.chat.id).first()
         if acc:
@@ -586,9 +597,15 @@ def unmute_cmd(payload: str, message: Message, replies: Replies) -> None:
                 text="✔️ Home timeline unmuted",
                 quote=message,
             )
+            return
+
+        acc = session.query(Account).filter_by(notifications=message.chat.id).first()
+        if acc:
+            acc.muted_notif = False
+            replies.add(text="✔️ Notifications timeline unmuted", quote=message)
         else:
             replies.add(
-                text="❌ Wrong usage, you must send that command in the Home chat to unmute it",
+                text="❌ Wrong usage, you must send that command in the Home or Notifications chat to unmute them",
                 quote=message,
             )
 

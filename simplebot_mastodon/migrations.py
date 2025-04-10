@@ -7,7 +7,7 @@ from simplebot.bot import DeltaBot
 
 from .util import get_database_path
 
-DATABASE_VERSION = 1
+DATABASE_VERSION = 2
 
 
 def get_db_version(database: sqlite3.Connection) -> int:
@@ -51,3 +51,7 @@ def migrate1(database: sqlite3.Connection) -> None:
     except Exception as ex:
         # ignore to avoid crash caused by accidental empty database table
         print(f"WARNING: ignoring exception: {ex}")
+
+
+def migrate2(database: sqlite3.Connection) -> None:
+    database.execute("ALTER TABLE account ADD COLUMN  muted_notif BOOLEAN")

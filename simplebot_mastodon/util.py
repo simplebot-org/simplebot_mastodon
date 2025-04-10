@@ -282,6 +282,7 @@ def _check_mastodon(bot: DeltaBot) -> None:
                         acc.muted_home,
                         acc.notifications,
                         acc.last_notif,
+                        acc.muted_notif,
                     )
                 )
 
@@ -301,6 +302,7 @@ def _check_mastodon(bot: DeltaBot) -> None:
                     muted_home,
                     notif_chat,
                     last_notif,
+                    muted_notif,
                 ) = instances[key].pop()
                 acc_count -= 1
                 if not instances[key]:
@@ -309,7 +311,9 @@ def _check_mastodon(bot: DeltaBot) -> None:
                 bot.logger.debug(f"{addr}: Checking account ({key})")
                 try:
                     masto = get_mastodon(key, token)
-                    _check_notifications(bot, masto, addr, notif_chat, last_notif)
+                    _check_notifications(
+                        bot, masto, addr, notif_chat, last_notif, muted_notif
+                    )
                     if muted_home:
                         bot.logger.debug(f"{addr}: Ignoring Home timeline (muted)")
                     else:
@@ -518,7 +522,12 @@ def _handle_dms(dms: list, bot: DeltaBot, addr: str, notif_chat: int) -> None:
 
 
 def _check_notifications(
-    bot: DeltaBot, masto: Mastodon, addr: str, notif_chat: int, last_id: str
+    bot: DeltaBot,
+    masto: Mastodon,
+    addr: str,
+    notif_chat: int,
+    last_id: str,
+    muted_notif: bool,
 ) -> None:
     dms = []
     notifications = []
@@ -537,7 +546,7 @@ def _check_notifications(
                 content = toot.status.content
                 if not any(keyword in content for keyword in SPAM):
                     dms.append(toot.status)
-            else:
+            elif not muted_notif or toot.type not in ("reblog", "favourite"):
                 notifications.append(toot)
 
     if dms:

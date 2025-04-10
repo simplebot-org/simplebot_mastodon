@@ -27,6 +27,7 @@ class Account(Base):
     last_home = Column(String(1000))
     last_notif = Column(String(1000))
     muted_home = Column(Boolean)
+    muted_notif = Column(Boolean)
 
     dm_chats = relationship(
         "DmChat", backref="account", cascade="all, delete, delete-orphan"
