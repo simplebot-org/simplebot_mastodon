@@ -30,6 +30,7 @@ SPAM = [
     "https://discord.gg/83CnebyzXh",
     "https://matrix.to/#/#nicoles_place:matrix.org",
 ]
+MUTED_NOTIFICATIONS = ("reblog", "favourite", "follow")
 TOOT_SEP = "\n\n―――――――――――――――\n\n"
 STRFORMAT = "%Y-%m-%d %H:%M"
 _scope = __name__.split(".", maxsplit=1)[0]
@@ -546,7 +547,7 @@ def _check_notifications(
                 content = toot.status.content
                 if not any(keyword in content for keyword in SPAM):
                     dms.append(toot.status)
-            elif not muted_notif or toot.type not in ("reblog", "favourite"):
+            elif not muted_notif or toot.type not in MUTED_NOTIFICATIONS:
                 notifications.append(toot)
 
     if dms:

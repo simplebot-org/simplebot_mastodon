@@ -568,7 +568,7 @@ def mute_cmd(payload: str, message: Message, replies: Replies) -> None:
         if acc:
             acc.muted_notif = True
             replies.add(
-                text="✔️ Notifications timeline muted, favorites and boosts will not be notified",
+                text="✔️ Notifications timeline muted: follows, favorites and boosts will not be notified",
                 quote=message,
             )
         else:
